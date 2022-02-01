@@ -86,4 +86,22 @@ ifeq ($(CONFIG_TOUCHSCREEN_NT36XXX_I2C), y)
 	obj-$(CONFIG_MSM_TOUCH) += nt36xxx-i2c.o
 endif
 
+ifeq ($(CONFIG_TOUCHSCREEN_GOODIX_BRL), y)
+	LINUX_INC += -include $(TOUCH_ROOT)/goodix_berlin_driver/goodix_ts_core.h
+
+	goodix_ts-y := \
+		 ./goodix_berlin_driver/goodix_ts_core.o \
+		 ./goodix_berlin_driver/goodix_brl_hw.o \
+		 ./goodix_berlin_driver/goodix_cfg_bin.o \
+		 ./goodix_berlin_driver/goodix_ts_utils.o \
+		 ./goodix_berlin_driver/goodix_brl_fwupdate.o \
+		 ./goodix_berlin_driver/goodix_ts_tools.o \
+		 ./goodix_berlin_driver/goodix_ts_gesture.o \
+		 ./goodix_berlin_driver/goodix_ts_inspect.o \
+		 ./goodix_berlin_driver/goodix_brl_spi.o \
+		 ./goodix_berlin_driver/goodix_brl_i2c.o
+
+	obj-$(CONFIG_MSM_TOUCH) += goodix_ts.o
+endif
+
 CDEFINES += -DBUILD_TIMESTAMP=\"$(shell date -u +'%Y-%m-%dT%H:%M:%SZ')\"
