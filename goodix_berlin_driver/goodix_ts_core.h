@@ -270,6 +270,7 @@ struct goodix_module {
  * @irq_flag: irq trigger type
  * @swap_axis: whether swaw x y axis
  * @panel_max_x/y/w/p: resolution and size
+ * @invert_xy: invert x and y for inversely mounted IC
  * @pannel_key_map: key map
  * @fw_name: name of the firmware image
  */
@@ -287,6 +288,7 @@ struct goodix_ts_board_data {
 	unsigned int panel_max_y;
 	unsigned int panel_max_w; /*major and minor*/
 	unsigned int panel_max_p; /*pressure*/
+	bool invert_xy;
 
 	bool pen_enable;
 	char fw_name[GOODIX_MAX_STR_LABLE_LEN];

@@ -964,6 +964,13 @@ static int goodix_parse_dt_resolution(struct device_node *node,
 		return ret;
 	}
 
+	board_data->invert_xy = of_property_read_bool(node,
+					"invert_xy");
+	if (board_data->invert_xy) {
+		swap(board_data->panel_max_x, board_data->panel_max_y);
+		ts_info("Panel max x and max y inverted\n");
+	}
+
 	ret = of_property_read_u32(node, "goodix,panel-max-w",
 				&board_data->panel_max_w);
 	if (ret) {
@@ -1152,7 +1159,8 @@ static void goodix_ts_report_pen(struct input_dev *dev,
 }
 
 static void goodix_ts_report_finger(struct input_dev *dev,
-		struct goodix_touch_data *touch_data)
+		struct goodix_touch_data *touch_data,
+		bool invert_xy)
 {
 	unsigned int touch_num = touch_data->touch_num;
 	int i;
@@ -1165,6 +1173,11 @@ static void goodix_ts_report_finger(struct input_dev *dev,
 				touch_data->coords[i].x,
 				touch_data->coords[i].y,
 				touch_data->coords[i].w);
+
+			if (invert_xy)
+				swap(touch_data->coords[i].x,
+						touch_data->coords[i].y);
+
 			input_mt_slot(dev, i);
 			input_mt_report_slot_state(dev, MT_TOOL_FINGER, true);
 			input_report_abs(dev, ABS_MT_POSITION_X,
@@ -1246,7 +1259,8 @@ static irqreturn_t goodix_ts_threadirq_func(int irq, void *data)
 		if (ts_event->event_type == EVENT_TOUCH) {
 			/* report touch */
 			goodix_ts_report_finger(core_data->input_dev,
-					&ts_event->touch_data);
+					&ts_event->touch_data,
+					core_data->board_data.invert_xy);
 		}
 		if (core_data->board_data.pen_enable &&
 				ts_event->event_type == EVENT_PEN) {
