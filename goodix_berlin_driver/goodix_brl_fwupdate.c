@@ -949,10 +949,6 @@ int goodix_fw_update_proc(struct fw_update_ctrl *fwu_ctrl)
 
 	if (!(fwu_ctrl->mode & UPDATE_MODE_FORCE)) {
 		ret = goodix_fw_version_compare(fwu_ctrl);
-		if (!ret) {
-			ts_info("no need to upgrade");
-			return 0;
-		}
 		ts_info("need to upgrade");
 	}
 
