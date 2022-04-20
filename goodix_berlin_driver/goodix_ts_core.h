@@ -39,6 +39,9 @@
 #include <linux/notifier.h>
 #include <linux/fb.h>
 #endif
+#include <linux/i2c.h>
+#include <linux/spi/spi.h>
+#include "../qts/qts_core_common.h"
 
 #define GOODIX_CORE_DRIVER_NAME			"goodix_ts"
 #define GOODIX_PEN_DRIVER_NAME			"goodix_ts,pen"
@@ -524,6 +527,8 @@ struct goodix_ts_core {
 	atomic_t delayed_vm_probe_pending;
 	atomic_t trusted_touch_mode;
 #endif
+	bool qts_en;
+	struct mutex tui_transition_lock;
 };
 
 /* external module structures */

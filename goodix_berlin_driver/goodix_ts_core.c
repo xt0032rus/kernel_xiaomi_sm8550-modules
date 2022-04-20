@@ -35,6 +35,7 @@
 static struct drm_panel *active_panel;
 static void goodix_panel_notifier_callback(enum panel_event_notifier_tag tag,
 		 struct panel_event_notification *event, void *client_data);
+static irqreturn_t  goodix_irq_handler(int irq, void *data);
 
 static void goodix_register_for_panel_events(struct device_node *dp,
 					struct goodix_ts_core *cd)
@@ -1023,6 +1024,7 @@ static int goodix_parse_dt(struct device_node *node,
 		board_data->iovdd_gpio = r;
 	}
 
+#ifndef CONFIG_ARCH_QTI_VM
 	r = of_get_named_gpio(node, "goodix,reset-gpio", 0);
 	if (r < 0) {
 		ts_err("invalid reset-gpio in dt: %d", r);
@@ -1045,6 +1047,7 @@ static int goodix_parse_dt(struct device_node *node,
 		ts_err("invalid irq-flags");
 		return -EINVAL;
 	}
+#endif
 
 	memset(board_data->avdd_name, 0, sizeof(board_data->avdd_name));
 	r = of_property_read_string(node, "goodix,avdd-name", &name_tmp);
@@ -1294,7 +1297,7 @@ static int goodix_ts_irq_setup(struct goodix_ts_core *core_data)
 	ts_info("IRQ:%u,flags:%d", core_data->irq, (int)ts_bdata->irq_flags);
 	ret = devm_request_threaded_irq(&core_data->pdev->dev,
 					core_data->irq, NULL,
-					goodix_ts_threadirq_func,
+					goodix_irq_handler,
 					ts_bdata->irq_flags | IRQF_ONESHOT,
 					GOODIX_CORE_DRIVER_NAME,
 					core_data);
@@ -2012,6 +2015,9 @@ int goodix_ts_stage2_init(struct goodix_ts_core *cd)
 			goto err_finger;
 		}
 	}
+#ifdef CONFIG_ARCH_QTI_VM
+		goto skip_goodix_ts_irq_setup;
+#endif
 	/* request irq line */
 	ret = goodix_ts_irq_setup(cd);
 	if (ret < 0) {
@@ -2028,6 +2034,10 @@ int goodix_ts_stage2_init(struct goodix_ts_core *cd)
 	cd->fb_notifier.notifier_call = goodix_ts_fb_notifier_callback;
 	if (fb_register_client(&cd->fb_notifier))
 		ts_err("Failed to register fb notifier client:%d", ret);
+#endif
+
+#ifdef CONFIG_ARCH_QTI_VM
+skip_goodix_ts_irq_setup:
 #endif
 	/* create sysfs files */
 	goodix_ts_sysfs_init(cd);
@@ -2093,6 +2103,10 @@ static int goodix_later_init_thread(void *data)
 	struct goodix_ts_core *cd = data;
 	struct goodix_ts_hw_ops *hw_ops = cd->hw_ops;
 
+#ifdef CONFIG_ARCH_QTI_VM
+	goto skip_to_stage2_init;
+#endif
+
 	/* step 1: read version */
 	ret = cd->hw_ops->read_version(cd, &cd->fw_version);
 	if (ret < 0) {
@@ -2142,7 +2156,9 @@ upgrade:
 	 * if not we will send config with interactive mode
 	 */
 	goodix_send_ic_config(cd, CONFIG_TYPE_NORMAL);
-
+#ifdef CONFIG_ARCH_QTI_VM
+skip_to_stage2_init:
+#endif
 	/* init other resources */
 	ret = goodix_ts_stage2_init(cd);
 	if (ret) {
@@ -2250,6 +2266,165 @@ out:
 }
 
 #endif
+
+static int goodix_ts_suspend_helper(void *data)
+{
+	struct goodix_ts_core *core_data = data;
+
+	return goodix_ts_suspend(core_data);
+}
+
+static int goodix_ts_resume_helper(void *data)
+{
+	struct goodix_ts_core *core_data = data;
+
+	return goodix_ts_resume(core_data);
+}
+
+static int goodix_ts_enable_touch_irq(void *data, bool enable)
+{
+	struct goodix_ts_core *core_data = data;
+	struct goodix_ts_hw_ops *hw_ops = core_data->hw_ops;
+
+	hw_ops->irq_enable(core_data, enable);
+	return 0;
+}
+
+static int goodix_ts_pre_la_tui_enable(void *data)
+{
+	struct goodix_ts_core *core_data = data;
+	struct goodix_ts_esd *ts_esd = &core_data->ts_esd;
+
+	mutex_lock(&core_data->tui_transition_lock);
+	atomic_set(&ts_esd->esd_on, 0);
+
+	return 0;
+}
+
+static int goodix_ts_post_la_tui_enable(void *data)
+{
+	struct goodix_ts_core *core_data = data;
+
+	goodix_ts_release_connects(core_data);
+	mutex_unlock(&core_data->tui_transition_lock);
+	return 0;
+}
+
+static int goodix_ts_post_la_tui_disable(void *data)
+{
+	struct goodix_ts_core *core_data = data;
+	struct goodix_ts_esd *ts_esd = &core_data->ts_esd;
+
+	atomic_set(&ts_esd->esd_on, 1);
+	return 0;
+}
+
+static int goodix_ts_post_le_tui_enable(void *data)
+{
+	int ret;
+	struct goodix_ts_core *cd = data;
+	struct goodix_ts_hw_ops *hw_ops = cd->hw_ops;
+
+	ret = hw_ops->read_version(cd, &cd->fw_version);
+	if (ret) {
+		ts_err("invalid fw version, abort");
+		return -EINVAL;
+	}
+	ret = hw_ops->get_ic_info(cd, &cd->ic_info);
+	if (ret) {
+		ts_err("invalid ic info, abort");
+		return -EINVAL;
+	}
+	return 0;
+}
+
+static int goodix_ts_post_le_tui_disable(void *data)
+{
+	struct goodix_ts_core *core_data = data;
+
+	goodix_ts_release_connects(core_data);
+	return 0;
+}
+
+static int goodix_ts_get_irq_num(void *data)
+{
+	struct goodix_ts_core *core_data = data;
+
+	return core_data->irq;
+}
+
+static irqreturn_t  goodix_irq_handler(int irq, void *data)
+{
+	struct goodix_ts_core *core_data = data;
+
+	if (!mutex_trylock(&core_data->tui_transition_lock))
+		return IRQ_HANDLED;
+
+	goodix_ts_threadirq_func(irq, data);
+	mutex_unlock(&core_data->tui_transition_lock);
+
+	return IRQ_HANDLED;
+}
+
+static void goodix_ts_fill_qts_vendor_data(struct qts_vendor_data *qts_vendor_data,
+		 struct goodix_ts_core *core_data)
+{
+	struct goodix_bus_interface *bus_interface;
+	struct device_node *node;
+	const char *touch_type;
+	int rc = 0;
+
+	bus_interface = core_data->bus;
+	node = bus_interface->dev->of_node;
+
+	rc = of_property_read_string(node, "goodix,touch-type", &touch_type);
+	if (rc) {
+		ts_err("No touch type\n");
+		return;
+	}
+
+	if (!strcmp(touch_type, "primary"))
+		qts_vendor_data->client_type = QTS_CLIENT_PRIMARY_TOUCH;
+	else
+		qts_vendor_data->client_type = QTS_CLIENT_SECONDARY_TOUCH;
+
+	switch (bus_interface->bus_type) {
+	case GOODIX_BUS_TYPE_I2C:
+		qts_vendor_data->client = to_i2c_client(bus_interface->dev);
+		qts_vendor_data->spi = NULL;
+		qts_vendor_data->bus_type = QTS_BUS_TYPE_I2C;
+		break;
+
+	case GOODIX_BUS_TYPE_SPI:
+		qts_vendor_data->client = NULL;
+		qts_vendor_data->spi = to_spi_device(bus_interface->dev);
+		qts_vendor_data->bus_type = QTS_BUS_TYPE_SPI;
+		break;
+
+	default:
+		ts_err("Invalid bus type :%d\n",
+				bus_interface->bus_type);
+		break;
+	}
+
+	qts_vendor_data->vendor_data = core_data;
+	qts_vendor_data->schedule_suspend = false;
+	qts_vendor_data->schedule_resume = false;
+	qts_vendor_data->qts_vendor_ops.suspend = goodix_ts_suspend_helper;
+	qts_vendor_data->qts_vendor_ops.resume = goodix_ts_resume_helper;
+	qts_vendor_data->qts_vendor_ops.enable_touch_irq = goodix_ts_enable_touch_irq;
+	qts_vendor_data->qts_vendor_ops.get_irq_num = goodix_ts_get_irq_num;
+	qts_vendor_data->qts_vendor_ops.pre_la_tui_enable = goodix_ts_pre_la_tui_enable;
+	qts_vendor_data->qts_vendor_ops.post_la_tui_enable = goodix_ts_post_la_tui_enable;
+	qts_vendor_data->qts_vendor_ops.pre_la_tui_disable = NULL;
+	qts_vendor_data->qts_vendor_ops.post_la_tui_disable = goodix_ts_post_la_tui_disable;
+	qts_vendor_data->qts_vendor_ops.pre_le_tui_enable = NULL;
+	qts_vendor_data->qts_vendor_ops.post_le_tui_enable = goodix_ts_post_le_tui_enable;
+	qts_vendor_data->qts_vendor_ops.pre_le_tui_disable = NULL;
+	qts_vendor_data->qts_vendor_ops.post_le_tui_disable = goodix_ts_post_le_tui_disable;
+	qts_vendor_data->qts_vendor_ops.irq_handler = goodix_irq_handler;
+}
+
 /**
  * goodix_ts_probe - called by kernel when Goodix touch
  *  platform driver is added.
@@ -2260,6 +2435,8 @@ static int goodix_ts_probe(struct platform_device *pdev)
 	struct goodix_bus_interface *bus_interface;
 	int ret;
 	struct device_node *node;
+	bool qts_en = false;
+	struct qts_vendor_data qts_vendor_data;
 
 	ts_info("goodix_ts_probe IN");
 
@@ -2293,31 +2470,53 @@ static int goodix_ts_probe(struct platform_device *pdev)
 		return -ENOMEM;
 	}
 
+	core_data->bus = bus_interface;
+	qts_en = of_property_read_bool(node, "goodix,qts_en");
+	if (qts_en) {
+		mutex_init(&core_data->tui_transition_lock);
+		goodix_ts_fill_qts_vendor_data(&qts_vendor_data, core_data);
+
+		ret = qts_client_register(qts_vendor_data);
+		if (ret) {
+			pr_err("qts client register failed, rc %d\n", ret);
+			goto err_out;
+		}
+		core_data->qts_en = qts_en;
+	}
+
 	if (IS_ENABLED(CONFIG_OF) && bus_interface->dev->of_node) {
 		/* parse devicetree property */
 		ret = goodix_parse_dt(node, &core_data->board_data);
 		if (ret) {
 			ts_err("failed parse device info form dts, %d", ret);
-			return -EINVAL;
+			ret = -EINVAL;
+			goto err_out;
 		}
+#if defined(CONFIG_DRM)
+		of_property_read_string(node, "qcom,touch-environment",
+				&core_data->touch_environment);
+#endif
 	} else {
 		ts_err("no valid device tree node found");
-		return -ENODEV;
+		ret = -ENODEV;
+		goto err_out;
 	}
 
 	core_data->hw_ops = goodix_get_hw_ops();
 	if (!core_data->hw_ops) {
 		ts_err("hw ops is NULL");
-		core_module_prob_sate = CORE_MODULE_PROB_FAILED;
-		return -EINVAL;
+		ret = -EINVAL;
+		goto err_out;
 	}
 	goodix_core_module_init();
 	/* touch core layer is a platform driver */
 	core_data->pdev = pdev;
-	core_data->bus = bus_interface;
 	platform_set_drvdata(pdev, core_data);
 
 	/* get GPIO resource */
+#ifdef CONFIG_ARCH_QTI_VM
+	goto skip_to_power_gpio_setup;
+#endif
 	ret = goodix_ts_gpio_setup(core_data);
 	if (ret) {
 		ts_err("failed init gpio");
@@ -2335,6 +2534,10 @@ static int goodix_ts_probe(struct platform_device *pdev)
 		ts_err("failed power on");
 		goto err_out;
 	}
+
+#ifdef CONFIG_ARCH_QTI_VM
+skip_to_power_gpio_setup:
+#endif
 
 	/* generic notifier callback */
 	core_data->ts_notifier.notifier_call = goodix_generic_noti_callback;
@@ -2354,6 +2557,7 @@ static int goodix_ts_probe(struct platform_device *pdev)
 	return 0;
 
 err_out:
+	devm_kfree(&pdev->dev, core_data);
 	core_data->init_stage = CORE_INIT_FAIL;
 	core_module_prob_sate = CORE_MODULE_PROB_FAILED;
 	ts_err("goodix_ts_core failed, ret:%d", ret);
@@ -2449,7 +2653,11 @@ static void __exit goodix_ts_core_exit(void)
 	goodix_i2c_bus_exit();
 }
 
+#ifdef CONFIG_ARCH_QTI_VM
+module_init(goodix_ts_core_init);
+#else
 late_initcall(goodix_ts_core_init);
+#endif
 module_exit(goodix_ts_core_exit);
 
 MODULE_DESCRIPTION("Goodix Touchscreen Core Module");

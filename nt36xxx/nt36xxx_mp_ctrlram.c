@@ -72,6 +72,7 @@ static int32_t *RawData_FW_CC = NULL;
 static struct proc_dir_entry *NVT_proc_selftest_entry = NULL;
 static int8_t nvt_mp_test_result_printed = 0;
 static uint8_t fw_ver = 0;
+unsigned char mpcriteria[PAGE_SIZE]; //novatek-mp-criteria-default
 
 extern void nvt_change_mode(uint8_t mode);
 extern uint8_t nvt_get_fw_pipe(void);
@@ -1054,8 +1055,8 @@ return:
 static int32_t nvt_selftest_open(struct inode *inode, struct file *file)
 {
 	struct device_node *np = ts->client->dev.of_node;
-	unsigned char mpcriteria[PAGE_SIZE] = {0};	//novatek-mp-criteria-default
 
+	memset(mpcriteria, 0, PAGE_SIZE * sizeof(mpcriteria[0]));
 	TestResult_Short = 0;
 	TestResult_Open = 0;
 	TestResult_FW_Rawdata = 0;

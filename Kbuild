@@ -88,6 +88,8 @@ endif
 
 ifeq ($(CONFIG_TOUCHSCREEN_GOODIX_BRL), y)
 	LINUX_INC += -include $(TOUCH_ROOT)/goodix_berlin_driver/goodix_ts_core.h
+	LINUX_INC += -include $(TOUCH_ROOT)/qts/qts_core.h
+	LINUX_INC += -include $(TOUCH_ROOT)/qts/qts_core_common.h
 
 	goodix_ts-y := \
 		 ./goodix_berlin_driver/goodix_ts_core.o \
@@ -99,7 +101,8 @@ ifeq ($(CONFIG_TOUCHSCREEN_GOODIX_BRL), y)
 		 ./goodix_berlin_driver/goodix_ts_gesture.o \
 		 ./goodix_berlin_driver/goodix_ts_inspect.o \
 		 ./goodix_berlin_driver/goodix_brl_spi.o \
-		 ./goodix_berlin_driver/goodix_brl_i2c.o
+		 ./goodix_berlin_driver/goodix_brl_i2c.o \
+		 ./qts/qts_core.o
 
 	obj-$(CONFIG_MSM_TOUCH) += goodix_ts.o
 endif

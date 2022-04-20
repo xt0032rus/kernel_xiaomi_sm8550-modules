@@ -167,9 +167,12 @@ static int goodix_i2c_probe(struct i2c_client *client,
 	int ret = 0;
 
 	ts_info("goodix i2c probe in");
+
+#ifndef CONFIG_ARCH_QTI_VM
 	ret = i2c_check_functionality(client->adapter, I2C_FUNC_I2C);
 	if (!ret)
 		return -EIO;
+#endif
 
 	/* get ic type */
 	ret = goodix_get_ic_type(client->dev.of_node);
