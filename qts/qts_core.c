@@ -1341,6 +1341,17 @@ static ssize_t trusted_touch_type_show(struct kobject *kobj, struct kobj_attribu
 	return scnprintf(buf, PAGE_SIZE, "%s", qts_data->vm_info->trusted_touch_type);
 }
 
+static ssize_t trusted_touch_device_path_show(struct kobject *kobj,
+			struct kobj_attribute *attr, char *buf)
+{
+	struct qts_data *qts_data = &qts_data_entries->info[QTS_CLIENT_PRIMARY_TOUCH];
+	char *path = NULL;
+
+	if (qts_data && qts_data->dev)
+		path = kobject_get_path(&qts_data->dev->kobj, GFP_KERNEL);
+
+	return scnprintf(buf, PAGE_SIZE, "%s", path ? path : "");
+}
 
 static struct kobj_attribute trusted_touch_enable_attr =
 	__ATTR(trusted_touch_enable, 0664, trusted_touch_enable_show, trusted_touch_enable_store);
@@ -1351,10 +1362,14 @@ static struct kobj_attribute trusted_touch_event_attr =
 static struct kobj_attribute trusted_touch_type_attr =
 	__ATTR(trusted_touch_type, 0664, trusted_touch_type_show, NULL);
 
+static struct kobj_attribute trusted_touch_device_path_attr =
+	__ATTR(trusted_touch_device_path, 0444, trusted_touch_device_path_show, NULL);
+
 static struct attribute *qts_attributes[] = {
 	&trusted_touch_enable_attr.attr,
 	&trusted_touch_event_attr.attr,
 	&trusted_touch_type_attr.attr,
+	&trusted_touch_device_path_attr.attr,
 	NULL,
 };
 

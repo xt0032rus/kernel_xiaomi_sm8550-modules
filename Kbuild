@@ -107,4 +107,12 @@ ifeq ($(CONFIG_TOUCHSCREEN_GOODIX_BRL), y)
 	obj-$(CONFIG_MSM_TOUCH) += goodix_ts.o
 endif
 
+ifeq ($(CONFIG_TOUCHSCREEN_ATMEL_MXT), y)
+
+	atmel_mxt_ts-y := \
+		 ./atmel_mxt/atmel_mxt_ts.o
+
+	obj-$(CONFIG_MSM_TOUCH) += atmel_mxt_ts.o
+endif
+
 CDEFINES += -DBUILD_TIMESTAMP=\"$(shell date -u +'%Y-%m-%dT%H:%M:%SZ')\"

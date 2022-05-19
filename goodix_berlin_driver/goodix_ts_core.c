@@ -1470,6 +1470,7 @@ static int goodix_ts_input_dev_config(struct goodix_ts_core *core_data)
 	input_dev->id.product = 0xDEAD;
 	input_dev->id.vendor = 0xBEEF;
 	input_dev->id.version = 10427;
+	input_dev->dev.parent = core_data->bus->dev;
 
 	set_bit(EV_SYN, input_dev->evbit);
 	set_bit(EV_KEY, input_dev->evbit);
