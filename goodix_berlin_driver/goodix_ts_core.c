@@ -2272,18 +2272,12 @@ static int goodix_ts_suspend_helper(void *data)
 {
 	struct goodix_ts_core *core_data = data;
 
-	if (!core_data || core_module_prob_sate != CORE_MODULE_PROB_SUCCESS)
-		return 0;
-
 	return goodix_ts_suspend(core_data);
 }
 
 static int goodix_ts_resume_helper(void *data)
 {
 	struct goodix_ts_core *core_data = data;
-
-	if (!core_data || core_module_prob_sate != CORE_MODULE_PROB_SUCCESS)
-		return 0;
 
 	return goodix_ts_resume(core_data);
 }
