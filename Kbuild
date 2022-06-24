@@ -115,4 +115,10 @@ ifeq ($(CONFIG_TOUCHSCREEN_ATMEL_MXT), y)
 	obj-$(CONFIG_MSM_TOUCH) += atmel_mxt_ts.o
 endif
 
+ifeq ($(CONFIG_TOUCHSCREEN_DUMMY), y)
+	dummy_ts-y := ./dummy_touch/dummy_touch.o
+
+	obj-$(CONFIG_MSM_TOUCH) += dummy_ts.o
+endif
+
 CDEFINES += -DBUILD_TIMESTAMP=\"$(shell date -u +'%Y-%m-%dT%H:%M:%SZ')\"

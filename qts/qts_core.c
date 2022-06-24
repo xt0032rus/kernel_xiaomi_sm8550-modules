@@ -241,15 +241,27 @@ static void qts_irq_enable(struct qts_data *qts_data, bool en)
 	}
 }
 
+static irqreturn_t  qts_irq_handler(int irq, void *data)
+{
+	struct qts_data *qts_data = data;
+
+	if (!mutex_trylock(&qts_data->transition_lock))
+		return IRQ_HANDLED;
+
+	qts_data->vendor_ops.irq_handler(irq, qts_data->vendor_data);
+	mutex_unlock(&qts_data->transition_lock);
+	return IRQ_HANDLED;
+}
+
 static int qts_irq_registration(struct qts_data *qts_data)
 {
 	int ret = 0;
 
 	qts_data->irq_gpio_flags = IRQF_TRIGGER_RISING;
 	pr_debug("irq:%d, flag:%x\n", qts_data->irq, qts_data->irq_gpio_flags);
-	ret = request_threaded_irq(qts_data->irq, NULL, qts_data->vendor_ops.irq_handler,
+	ret = request_threaded_irq(qts_data->irq, NULL, qts_irq_handler,
 				qts_data->irq_gpio_flags | IRQF_ONESHOT,
-				QTS_NAME, qts_data->vendor_data);
+				QTS_NAME, qts_data);
 	if (ret != 0)
 		pr_err("request_threaded_irq failed\n");
 	if (ret == 0)
@@ -368,10 +380,12 @@ static void qts_trusted_touch_tvm_vm_mode_enable(struct qts_data *qts_data)
 	int rc = 0;
 	int irq = 0;
 
+	mutex_lock(&qts_data->transition_lock);
 	if (qts_trusted_touch_get_vm_state(qts_data) != TVM_ALL_RESOURCES_LENT_NOTIFIED) {
 		pr_info("All lend notifications not received\n");
 		qts_trusted_touch_event_notify(qts_data,
 				TRUSTED_TOUCH_EVENT_NOTIFICATIONS_PENDING);
+		mutex_unlock(&qts_data->transition_lock);
 		return;
 	}
 
@@ -456,6 +470,7 @@ static void qts_trusted_touch_tvm_vm_mode_enable(struct qts_data *qts_data)
 
 	pr_debug("trusted touch enabled\n");
 
+	mutex_unlock(&qts_data->transition_lock);
 	return;
 sgl_cmp_fail:
 	kfree(expected_sgl_desc);
@@ -464,6 +479,7 @@ acl_fail:
 accept_fail:
 	qts_trusted_touch_abort_handler(qts_data,
 			TRUSTED_TOUCH_EVENT_ACCEPT_FAILURE);
+	mutex_unlock(&qts_data->transition_lock);
 }
 
 static void qts_vm_irq_on_lend_callback(void *data,
@@ -549,8 +565,10 @@ static void qts_trusted_touch_tvm_vm_mode_disable(struct qts_data *qts_data)
 {
 	int rc = 0;
 
+	mutex_lock(&qts_data->transition_lock);
 	if (atomic_read(&qts_data->trusted_touch_abort_status)) {
 		qts_trusted_touch_abort_tvm(qts_data);
+		mutex_unlock(&qts_data->transition_lock);
 		return;
 	}
 
@@ -593,10 +611,12 @@ static void qts_trusted_touch_tvm_vm_mode_disable(struct qts_data *qts_data)
 		qts_data->vendor_ops.post_le_tui_disable(qts_data->vendor_data);
 
 	pr_debug("trusted touch disabled\n");
+	mutex_unlock(&qts_data->transition_lock);
 	return;
 error:
 	qts_trusted_touch_abort_handler(qts_data,
 			TRUSTED_TOUCH_EVENT_RELEASE_FAILURE);
+	mutex_unlock(&qts_data->transition_lock);
 }
 
 static int qts_handle_trusted_touch_tvm(struct qts_data *qts_data, int value)
