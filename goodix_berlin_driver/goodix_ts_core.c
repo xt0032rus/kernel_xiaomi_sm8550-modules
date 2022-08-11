@@ -60,6 +60,7 @@ static void goodix_register_for_panel_events(struct device_node *dp,
 
 struct goodix_module goodix_modules;
 int core_module_prob_sate = CORE_MODULE_UNPROBED;
+struct mutex goodix_later_init_tmutex;
 
 int goodix_ts_esd_init(struct goodix_ts_core *cd);
 
@@ -2010,6 +2011,14 @@ static int goodix_generic_noti_callback(struct notifier_block *self,
 int goodix_ts_stage2_init(struct goodix_ts_core *cd)
 {
 	int ret;
+	struct goodix_bus_interface *bus_interface;
+	struct device_node *node;
+	bool is_primary;
+
+	bus_interface = cd->bus;
+	node = bus_interface->dev->of_node;
+	is_primary = (goodix_get_touch_type(node) == PRIMARY_TOUCH_IDX) ? 1 : 0;
+
 
 	/* alloc/config/register input device */
 	ret = goodix_ts_input_dev_config(cd);
@@ -2037,7 +2046,7 @@ int goodix_ts_stage2_init(struct goodix_ts_core *cd)
 	ts_info("success register irq");
 
 #if defined(CONFIG_DRM)
-	if (cd->touch_environment && !strcmp(cd->touch_environment, "pvm"))
+	if (is_primary && cd->touch_environment && !strcmp(cd->touch_environment, "pvm"))
 		goodix_register_for_panel_events(cd->bus->dev->of_node, cd);
 
 #elif defined(CONFIG_FB)
@@ -2051,6 +2060,9 @@ skip_goodix_ts_irq_setup:
 #endif
 	/* create sysfs files */
 	goodix_ts_sysfs_init(cd);
+
+	if (!is_primary)
+		return 0;
 
 	/* create procfs files */
 	goodix_ts_procfs_init(cd);
@@ -2110,6 +2122,7 @@ static int goodix_later_init_thread(void *data)
 	struct goodix_ts_core *cd = data;
 	struct goodix_ts_hw_ops *hw_ops = cd->hw_ops;
 
+	mutex_lock(&goodix_later_init_tmutex);
 #ifdef CONFIG_ARCH_QTI_VM
 	goto skip_to_stage2_init;
 #endif
@@ -2173,7 +2186,7 @@ skip_to_stage2_init:
 		goto uninit_fw;
 	}
 	cd->init_stage = CORE_INIT_STAGE2;
-
+	mutex_unlock(&goodix_later_init_tmutex);
 	return 0;
 
 uninit_fw:
@@ -2185,6 +2198,7 @@ err_out:
 		kfree(cd->ic_configs[i]);
 		cd->ic_configs[i] = NULL;
 	}
+	mutex_unlock(&goodix_later_init_tmutex);
 	return ret;
 }
 
@@ -2450,8 +2464,12 @@ static int goodix_ts_probe(struct platform_device *pdev)
 	struct device_node *node;
 	bool qts_en = false;
 	struct qts_vendor_data qts_vendor_data;
+	bool is_primary;
 
 	ts_info("goodix_ts_probe IN");
+
+	if (!core_module_prob_sate)
+		mutex_init(&goodix_later_init_tmutex);
 
 	bus_interface = pdev->dev.platform_data;
 	if (!bus_interface) {
@@ -2460,6 +2478,7 @@ static int goodix_ts_probe(struct platform_device *pdev)
 		return -ENODEV;
 	}
 	node = bus_interface->dev->of_node;
+	is_primary = (goodix_get_touch_type(node) == PRIMARY_TOUCH_IDX) ? 1 : 0;
 
 #if defined(CONFIG_DRM)
 	ret = goodix_check_dt(node);
@@ -2521,7 +2540,9 @@ static int goodix_ts_probe(struct platform_device *pdev)
 		ret = -EINVAL;
 		goto err_out;
 	}
-	goodix_core_module_init();
+
+	if (is_primary)
+		goodix_core_module_init();
 	/* touch core layer is a platform driver */
 	core_data->pdev = pdev;
 	platform_set_drvdata(pdev, core_data);
@@ -2557,7 +2578,8 @@ skip_to_power_gpio_setup:
 	goodix_ts_register_notifier(&core_data->ts_notifier);
 
 	/* debug node init */
-	goodix_tools_init();
+	if (is_primary)
+		goodix_tools_init();
 
 	core_data->init_stage = CORE_INIT_STAGE1;
 	goodix_modules.core_data = core_data;
@@ -2571,7 +2593,6 @@ skip_to_power_gpio_setup:
 
 err_out:
 	devm_kfree(&pdev->dev, core_data);
-	core_data->init_stage = CORE_INIT_FAIL;
 	core_module_prob_sate = CORE_MODULE_PROB_FAILED;
 	ts_err("goodix_ts_core failed, ret:%d", ret);
 	return ret;
@@ -2623,7 +2644,8 @@ static const struct dev_pm_ops dev_pm_ops = {
 #endif
 
 static const struct platform_device_id ts_core_ids[] = {
-	{.name = GOODIX_CORE_DRIVER_NAME},
+	{.name = GOODIX_CORE_DEVICE_NAME},
+	{.name = GOODIX_CORE_DEVICE_2_NAME},
 	{}
 };
 MODULE_DEVICE_TABLE(platform, ts_core_ids);

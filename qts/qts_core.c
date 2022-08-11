@@ -1669,9 +1669,13 @@ int qts_client_register(struct qts_vendor_data qts_vendor_data)
 			pr_err("mem allocation failed\n");
 			return -EPROBE_DEFER;
 		}
+		mutex_init(&qts_data_entries->qts_data_entries_lock);
+		qts_data_entries->qts_kset = kset_create_and_add("qts", NULL, kernel_kobj);
+		if (!qts_data_entries->qts_kset) {
+			pr_err("qts kset create failed\n");
+			return -ENOMEM;
+		}
 	}
-
-	mutex_init(&qts_data_entries->qts_data_entries_lock);
 
 	mutex_lock(&qts_data_entries->qts_data_entries_lock);
 
@@ -1707,12 +1711,6 @@ int qts_client_register(struct qts_vendor_data qts_vendor_data)
 	qts_data->schedule_resume = qts_vendor_data.schedule_resume;
 
 	qts_trusted_touch_init(qts_data);
-
-	qts_data_entries->qts_kset = kset_create_and_add("qts", NULL, kernel_kobj);
-	if (!qts_data_entries->qts_kset) {
-		pr_err("qts kset create failed\n");
-		return -ENOMEM;
-	}
 
 	mutex_init(&(qts_data->qts_clk_io_ctrl_mutex));
 	if (qts_data->tui_supported)
