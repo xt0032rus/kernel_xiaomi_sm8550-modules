@@ -11,6 +11,11 @@ endif
 	LINUX_INC += -include $(TOUCH_ROOT)/config/gki_kalamatouchconf.h
 #endif
 
+#ifeq ($(CONFIG_ARCH_KHAJE), y)
+	include $(TOUCH_ROOT)/config/gki_khajetouch.conf
+	LINUX_INC += -include $(TOUCH_ROOT)/config/gki_khajetouchconf.h
+#endif
+
 LINUX_INC +=	-Iinclude/linux \
 		-Iinclude/linux/drm \
 		-Iinclude/linux/gunyah \
@@ -119,6 +124,16 @@ ifeq ($(CONFIG_TOUCHSCREEN_DUMMY), y)
 	dummy_ts-y := ./dummy_touch/dummy_touch.o
 
 	obj-$(CONFIG_MSM_TOUCH) += dummy_ts.o
+endif
+
+ifeq ($(CONFIG_TOUCHSCREEN_SYNAPTICS_TCM), y)
+	synaptics_tcm_ts-y := \
+		 ./synaptics_tcm/synaptics_tcm_core.o \
+		 ./synaptics_tcm/synaptics_tcm_i2c.o \
+		 ./synaptics_tcm/synaptics_tcm_touch.o
+
+	obj-$(CONFIG_MSM_TOUCH) += synaptics_tcm_ts.o
+
 endif
 
 CDEFINES += -DBUILD_TIMESTAMP=\"$(shell date -u +'%Y-%m-%dT%H:%M:%SZ')\"

@@ -1,6 +1,7 @@
  /*
   * Goodix Touchscreen Driver
   * Copyright (C) 2020 - 2021 Goodix, Inc.
+  * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
   *
   * This program is free software; you can redistribute it and/or modify
   * it under the terms of the GNU General Public License as published by
@@ -2066,10 +2067,10 @@ skip_goodix_ts_irq_setup:
 
 	/* create procfs files */
 	goodix_ts_procfs_init(cd);
-
+#ifdef GOODIX_SUSPEND_GESTURE_ENABLE
 	/* gesture init */
 	gesture_module_init();
-
+#endif
 	/* inspect init */
 	inspect_module_init();
 
@@ -2608,7 +2609,9 @@ static int goodix_ts_remove(struct platform_device *pdev)
 	goodix_tools_exit();
 
 	if (core_data->init_stage >= CORE_INIT_STAGE2) {
+	#ifdef GOODIX_SUSPEND_GESTURE_ENABLE
 		gesture_module_exit();
+	#endif
 		inspect_module_exit();
 		hw_ops->irq_enable(core_data, false);
 
