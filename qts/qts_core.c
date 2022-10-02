@@ -468,7 +468,7 @@ static void qts_trusted_touch_tvm_vm_mode_enable(struct qts_data *qts_data)
 	if (qts_data->vendor_ops.post_le_tui_enable)
 		qts_data->vendor_ops.post_le_tui_enable(qts_data->vendor_data);
 
-	pr_debug("trusted touch enabled\n");
+	pr_info("Irq, iomem are accepted and trusted touch enabled\n");
 
 	mutex_unlock(&qts_data->transition_lock);
 	return;
@@ -610,7 +610,7 @@ static void qts_trusted_touch_tvm_vm_mode_disable(struct qts_data *qts_data)
 	if (qts_data->vendor_ops.post_le_tui_disable)
 		qts_data->vendor_ops.post_le_tui_disable(qts_data->vendor_data);
 
-	pr_debug("trusted touch disabled\n");
+	pr_info("Irq, iomem are released and trusted touch disabled\n");
 	mutex_unlock(&qts_data->transition_lock);
 	return;
 error:
@@ -726,15 +726,20 @@ static void qts_trusted_touch_abort_pvm(struct qts_data *qts_data)
 	case PVM_IRQ_LENT:
 	case PVM_IRQ_LENT_NOTIFIED:
 		rc = gh_irq_reclaim(qts_data->vm_info->irq_label);
-		if (rc)
+		if (rc) {
 			pr_err("failed to reclaim irq on pvm rc:%d\n", rc);
+			return;
+		}
 	case PVM_IRQ_RECLAIMED:
 	case PVM_IOMEM_LENT:
 	case PVM_IOMEM_LENT_NOTIFIED:
 	case PVM_IOMEM_RELEASE_NOTIFIED:
 		rc = gh_rm_mem_reclaim(qts_data->vm_info->vm_mem_handle, 0);
-		if (rc)
+		if (rc) {
 			pr_err("failed to reclaim iomem on pvm rc:%d\n", rc);
+			qts_trusted_touch_set_vm_state(qts_data, PVM_IOMEM_RELEASE_NOTIFIED);
+			return;
+		}
 		qts_data->vm_info->vm_mem_handle = 0;
 	case PVM_IOMEM_RECLAIMED:
 	case PVM_INTERRUPT_DISABLED:
@@ -854,7 +859,7 @@ static void qts_trusted_touch_pvm_vm_mode_disable(struct qts_data *qts_data)
 	}
 
 	if (qts_trusted_touch_get_vm_state(qts_data) != PVM_ALL_RESOURCES_RELEASE_NOTIFIED)
-		pr_debug("all release notifications are not received yet\n");
+		pr_info("all release notifications are not received yet\n");
 
 	if (qts_data->vendor_ops.pre_la_tui_disable)
 		qts_data->vendor_ops.pre_la_tui_disable(qts_data->vendor_data);
@@ -889,7 +894,7 @@ static void qts_trusted_touch_pvm_vm_mode_disable(struct qts_data *qts_data)
 	if (qts_data->vendor_ops.post_la_tui_disable)
 		qts_data->vendor_ops.post_la_tui_disable(qts_data->vendor_data);
 
-	pr_debug("trusted touch disabled\n");
+	pr_info("Irq, iomem are reclaimed and trusted touch disabled\n");
 	return;
 error:
 	qts_trusted_touch_abort_handler(qts_data,
@@ -1079,7 +1084,7 @@ static int qts_trusted_touch_pvm_vm_mode_enable(struct qts_data *qts_data)
 	mutex_unlock(&qts_data->transition_lock);
 	atomic_set(&qts_data->trusted_touch_transition, 0);
 	atomic_set(&qts_data->trusted_touch_enabled, 1);
-	pr_debug("trusted touch enabled\n");
+	pr_info("Irq, iomem are lent and trusted touch enabled\n");
 	return rc;
 
 abort_handler:
@@ -1315,6 +1320,8 @@ static ssize_t trusted_touch_enable_store(struct kobject *kobj, struct kobj_attr
 
 	if (!atomic_read(&qts_data->trusted_touch_initialized))
 		return -EIO;
+
+	pr_info("TUI trusted_touch_enable:%d\n", value);
 
 #ifdef CONFIG_ARCH_QTI_VM
 	err = qts_handle_trusted_touch_tvm(qts_data, value);
