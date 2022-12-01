@@ -28,7 +28,7 @@
  */
 
 #include "pt_regs.h"
-#include <linux/pt_platform.h>
+#include "pt_platform.h"
 
 #ifdef CONFIG_TOUCHSCREEN_PARADE_PLATFORM_FW_UPGRADE
 /* FW for Panel ID = 0x00 */

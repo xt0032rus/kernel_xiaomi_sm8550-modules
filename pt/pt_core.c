@@ -32,6 +32,7 @@
 #include <linux/kthread.h>
 #include <linux/suspend.h>
 #include "pt_regs.h"
+#include <linux/soc/qcom/panel_event_notifier.h>
 
 #define PINCTRL_STATE_ACTIVE    "pmx_ts_active"
 #define PINCTRL_STATE_SUSPEND   "pmx_ts_suspend"
@@ -3786,7 +3787,7 @@ static int pt_pip1_read_data_block_(struct pt_core_data *cd,
 		return 0;
 
 	if (read_buf_size >= *actual_read_len &&
-	    *actual_read_len < PT_MAX_PIP2_MSG_SIZE)
+		*actual_read_len < PT_MAX_PIP2_MSG_SIZE)
 		memcpy(read_buf, &cd->response_buf[10], *actual_read_len);
 	else
 		return -EPROTO;
@@ -10782,7 +10783,7 @@ static int pt_core_suspend(struct device *dev)
 	cd->wait_until_wake = 0;
 	mutex_unlock(&cd->system_lock);
 
-	if (mem_sleep_current == PM_SUSPEND_MEM) {
+	if (pm_suspend_via_firmware()) {
 		rc = pt_core_suspend_(cd->dev);
 		cd->quick_boot = true;
 	} else {
@@ -10978,7 +10979,7 @@ static int pt_core_resume(struct device *dev)
 		return 0;
 
 
-	if (mem_sleep_current == PM_SUSPEND_MEM) {
+	if (pm_suspend_via_firmware()) {
 		rc = pt_core_restore(cd->dev);
 	} else {
 		pt_debug(cd->dev, DL_INFO, "%s start\n", __func__);
@@ -11550,9 +11551,9 @@ int _pt_read_us_file(struct device *dev, u8 *file_path, u8 *buf, int *size)
 	}
 	pt_debug(dev, DL_WARN, "%s: path = %s\n", __func__, file_path);
 
-	oldfs = get_fs();
-	set_fs(KERNEL_DS);
-	filp = filp_open(file_path, O_RDONLY, 0400);
+	oldfs = force_uaccess_begin();
+	filp = filp_open_block(file_path, O_RDONLY, 0400);
+
 	if (IS_ERR(filp)) {
 		pt_debug(dev, DL_ERROR, "%s: Failed to open %s\n", __func__,
 			file_path);
@@ -11593,7 +11594,11 @@ int _pt_read_us_file(struct device *dev, u8 *file_path, u8 *buf, int *size)
 		goto exit;
 	}
 	filp->private_data = inode->i_private;
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 0, 0))
+	if (filp->f_op->read(filp, buf, read_len, &(filp->f_pos)) != read_len) {
+#else
 	if (vfs_read(filp, buf, read_len, &(filp->f_pos)) != read_len) {
+#endif
 		pt_debug(dev, DL_ERROR, "%s: file read error.\n", __func__);
 		rc = -EINVAL;
 		goto exit;
@@ -11604,8 +11609,9 @@ exit:
 	if (filp_close(filp, NULL) != 0)
 		pt_debug(dev, DL_ERROR, "%s: file close error.\n", __func__);
 err:
-	set_fs(oldfs);
+	force_uaccess_end(oldfs);
 	return rc;
+
 }
 
 /*******************************************************************************
@@ -12799,41 +12805,40 @@ static void pt_suspend_work(struct work_struct *work)
  *   event  - event type of fb notifier
  *  *data   - pointer to fb_event structure
  ******************************************************************************/
-static int drm_notifier_callback(struct notifier_block *self,
-		unsigned long event, void *data)
+static void drm_notifier_callback(enum panel_event_notifier_tag tag,
+		struct panel_event_notification *notification, void *client_data)
 {
-	struct pt_core_data *cd =
-		container_of(self, struct pt_core_data, fb_notifier);
-	struct drm_panel_notifier *evdata = data;
-	int *blank;
+	struct pt_core_data *cd = client_data;
+
+	if(!notification)
+	{
+		pt_debug(cd->dev,DL_INFO, "%s: Invalid notification\n", __func__);
+		return;
+	}
 
 	pt_debug(cd->dev, DL_INFO, "%s: DRM notifier called!\n", __func__);
 
-	if (!evdata)
-		goto exit;
-
-	if (!(event == DRM_PANEL_EARLY_EVENT_BLANK ||
-		event == DRM_PANEL_EVENT_BLANK)) {
-		pt_debug(cd->dev, DL_INFO, "%s: Event(%lu) do not need process\n",
-			__func__, event);
+	if (!(notification->notif_type == DRM_PANEL_EVENT_BLANK ||
+		notification->notif_type == DRM_PANEL_EVENT_BLANK)) {
+		pt_debug(cd->dev, DL_INFO, "%s: Event(%d) do not need process\n",
+			__func__, notification->notif_type);
 		goto exit;
 	}
 
 	if (cd->quick_boot || cd->drv_debug_suspend)
 		goto exit;
 
-	blank = evdata->data;
-	pt_debug(cd->dev, DL_INFO, "%s: DRM event:%lu,blank:%d fb_state %d sleep state %d ",
-		__func__, event, *blank, cd->fb_state, cd->sleep_state);
+	pt_debug(cd->dev, DL_INFO, "%s: DRM event:%d,fb_state %d",
+		__func__, notification->notif_type, cd->fb_state);
 	pt_debug(cd->dev, DL_INFO, "%s: DRM Power - %s - FB state %d ",
-		__func__, (*blank == DRM_PANEL_BLANK_UNBLANK)?"UP":"DOWN", cd->fb_state);
+		__func__, (notification->notif_type == DRM_PANEL_EVENT_UNBLANK)?"UP":"DOWN", cd->fb_state);
 
-	if (*blank == DRM_PANEL_BLANK_UNBLANK) {
+	if (notification->notif_type == DRM_PANEL_EVENT_UNBLANK) {
 		pt_debug(cd->dev, DL_INFO, "%s: UNBLANK!\n", __func__);
-		if (event == DRM_PANEL_EARLY_EVENT_BLANK) {
-			pt_debug(cd->dev, DL_INFO, "%s: resume: event = %lu, not care\n",
-				__func__, event);
-		} else if (event == DRM_PANEL_EVENT_BLANK) {
+		if (notification->notif_type == DRM_PANEL_EVENT_BLANK) {
+			pt_debug(cd->dev, DL_INFO, "%s: resume: event = %d, not care\n",
+				__func__, notification->notif_type);
+		} else if (notification->notif_type == DRM_PANEL_EVENT_BLANK) {
 			if (cd->fb_state != FB_ON) {
 				pt_debug(cd->dev, DL_INFO, "%s: Resume notifier called!\n",
 					__func__);
@@ -12853,9 +12858,9 @@ static int drm_notifier_callback(struct notifier_block *self,
 				pt_debug(cd->dev, DL_INFO, "%s: Resume notified!\n", __func__);
 			}
 		}
-	} else if (*blank == DRM_PANEL_BLANK_LP || *blank == DRM_PANEL_BLANK_POWERDOWN) {
+	} else if (notification->notif_type == DRM_PANEL_EVENT_BLANK_LP) {
 		pt_debug(cd->dev, DL_INFO, "%s: LOWPOWER!\n", __func__);
-		if (event == DRM_PANEL_EARLY_EVENT_BLANK) {
+		if (notification->notif_type == DRM_PANEL_EVENT_BLANK) {
 			if (cd->fb_state != FB_OFF) {
 #if defined(CONFIG_PM_SLEEP)
 				pt_debug(cd->dev, DL_INFO, "%s: Suspend notifier called!\n",
@@ -12872,16 +12877,16 @@ static int drm_notifier_callback(struct notifier_block *self,
 				cd->fb_state = FB_OFF;
 				pt_debug(cd->dev, DL_INFO, "%s: Suspend notified!\n", __func__);
 			}
-		} else if (event == DRM_PANEL_EVENT_BLANK) {
-			pt_debug(cd->dev, DL_INFO, "%s: suspend: event = %lu, not care\n",
-				__func__, event);
+		} else if (notification->notif_type == DRM_PANEL_EVENT_BLANK) {
+			pt_debug(cd->dev, DL_INFO, "%s: suspend: event = %d, not care\n",
+				__func__, notification->notif_type);
 		}
 	} else {
 		pt_debug(cd->dev, DL_INFO, "%s: DRM BLANK(%d) do not need process\n",
-			__func__, *blank);
+			__func__, notification->notif_type);
 	}
 exit:
-	return 0;
+	return;
 }
 
 /*******************************************************************************
@@ -12894,9 +12899,7 @@ exit:
  ******************************************************************************/
 static void pt_setup_drm_notifier(struct pt_core_data *cd)
 {
-	cd->fb_state = FB_NONE;
-	cd->fb_notifier.notifier_call = drm_notifier_callback;
-	pt_debug(cd->dev, DL_INFO, "%s: Setting up drm notifier\n", __func__);
+	void *cookie = NULL;
 
 	if (!active_panel)
 		pt_debug(cd->dev, DL_ERROR,
@@ -12913,11 +12916,9 @@ static void pt_setup_drm_notifier(struct pt_core_data *cd)
 		INIT_WORK(&cd->suspend_work, pt_suspend_work);
 	}
 
-	if (active_panel &&
-		drm_panel_notifier_register(active_panel,
-			&cd->fb_notifier) < 0)
-		pt_debug(cd->dev, DL_ERROR,
-			"%s: Register notifier failed!\n", __func__);
+	cookie = panel_event_notifier_register(PANEL_EVENT_NOTIFICATION_PRIMARY,
+			PANEL_EVENT_NOTIFIER_CLIENT_PRIMARY_TOUCH,
+			active_panel,&drm_notifier_callback, cd);
 }
 #elif defined(CONFIG_FB)
 /*******************************************************************************
@@ -17968,7 +17969,7 @@ int pt_release(struct pt_core_data *cd)
 	unregister_early_suspend(&cd->es);
 #elif defined(CONFIG_DRM)
 	if (active_panel)
-		drm_panel_notifier_unregister(active_panel, &cd->fb_notifier);
+		panel_event_notifier_unregister(&cd->fb_notifier);
 #elif defined(CONFIG_FB)
 	fb_unregister_client(&cd->fb_notifier);
 #endif

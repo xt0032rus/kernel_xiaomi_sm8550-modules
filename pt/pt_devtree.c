@@ -31,7 +31,7 @@
 #include <linux/err.h>
 #include <linux/of_device.h>
 #include <linux/slab.h>
-#include <linux/pt_platform.h>
+#include "pt_platform.h"
 #include "pt_regs.h"
 
 #define MAX_NAME_LENGTH		64

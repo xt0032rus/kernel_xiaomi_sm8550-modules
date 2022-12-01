@@ -2028,10 +2028,10 @@ static int save_header(char *out_buf, int index, struct result *result)
 	char time_buf[100] = {0};
 
 #if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 0, 0))
-	struct timespec ts;
+	struct timespec64 ts;
 
-	getnstimeofday(&ts);
-	rtc_time_to_tm(ts.tv_sec, &tm);
+	ktime_get_real_ts64(&ts);
+	rtc_time64_to_tm(ts.tv_sec, &tm);
 #else
 	struct timex txc;
 
@@ -2117,7 +2117,6 @@ int save_engineering_data(struct device *dev, char *out_buf, int index,
 	tx_num = cmcp_info->tx_num;
 	rx_num = cmcp_info->rx_num;
 	btn_num = cmcp_info->btn_num;
-
 	fw_revision_control = dad->si->ttdata.revctrl;
 	fw_config_ver = dad->si->ttdata.fw_ver_conf;
 	/*calculate silicon id*/
@@ -2246,11 +2245,11 @@ int save_engineering_data(struct device *dev, char *out_buf, int index,
 						index = prepare_print_data(
 							out_buf,
 							&tmp, index, 1);
-					for (j = 1; j < tx_num; j++)
-						index = prepare_print_data(
-						out_buf,
-			&cmcp_info->cm_sensor_column_delta[(j-1)*rx_num+i],
-						index, 1);
+						for (j = 1; j < tx_num; j++)
+							index = prepare_print_data(
+							out_buf,
+				&cmcp_info->cm_sensor_column_delta[(j-1)*rx_num+i],
+							index, 1);
 						index = prepare_print_string(
 								out_buf,
 								"\n", index);
@@ -2284,11 +2283,11 @@ int save_engineering_data(struct device *dev, char *out_buf, int index,
 						index = prepare_print_data(
 								out_buf, &i,
 								index, 1);
-					for (j = 0; j < tx_num; j++)
-						index = prepare_print_data(
-							out_buf,
-				&cmcp_info->cm_sensor_row_delta[j*rx_num+i-1],
-							index, 1);
+						for (j = 0; j < tx_num; j++)
+							index = prepare_print_data(
+								out_buf,
+					&cmcp_info->cm_sensor_row_delta[j*rx_num+i-1],
+								index, 1);
 						index = prepare_print_string(
 							out_buf,
 							"\n", index);

@@ -876,8 +876,13 @@ exit:
 
 static int rawdata_proc_open(struct inode *inode, struct file *file)
 {
-	return single_open_size(file, rawdata_proc_show,
+	#if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 19, 0))
+		return single_open_size(file, rawdata_proc_show,
+			pde_data(inode), PAGE_SIZE * 10);
+	#else
+		return single_open_size(file, rawdata_proc_show,
 			PDE_DATA(inode), PAGE_SIZE * 10);
+	#endif
 }
 
 #if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 6, 0))
