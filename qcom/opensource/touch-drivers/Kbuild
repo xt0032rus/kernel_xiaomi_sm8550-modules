@@ -107,6 +107,41 @@ ifeq ($(CONFIG_TOUCH_FOCALTECH), y)
 	obj-$(CONFIG_MSM_TOUCH) += focaltech_fts.o
 endif
 
+ifeq ($(CONFIG_TOUCHSCREEN_ST_FTS_V521_SPI), y)
+	LINUX_INC += -include $(TOUCH_ROOT)/fts_spi/fts_lib/ftsCompensation.h
+	LINUX_INC += -include $(TOUCH_ROOT)/fts_spi/fts_lib/ftsCore.h
+	LINUX_INC += -include $(TOUCH_ROOT)/fts_spi/fts_lib/ftsError.h
+	LINUX_INC += -include $(TOUCH_ROOT)/fts_spi/fts_lib/ftsFlash.h
+	LINUX_INC += -include $(TOUCH_ROOT)/fts_spi/fts_lib/ftsFrame.h
+	LINUX_INC += -include $(TOUCH_ROOT)/fts_spi/fts_lib/ftsGesture.h
+	LINUX_INC += -include $(TOUCH_ROOT)/fts_spi/fts_lib/ftsHardware.h
+	LINUX_INC += -include $(TOUCH_ROOT)/fts_spi/fts_lib/ftsIO.h
+	LINUX_INC += -include $(TOUCH_ROOT)/fts_spi/fts_lib/ftsSoftware.h
+	LINUX_INC += -include $(TOUCH_ROOT)/fts_spi/fts_lib/ftsTest.h
+	LINUX_INC += -include $(TOUCH_ROOT)/fts_spi/fts_lib/ftsTime.h
+	LINUX_INC += -include $(TOUCH_ROOT)/fts_spi/fts_lib/ftsTool.h
+	LINUX_INC += -include $(TOUCH_ROOT)/fts_spi/fts_fw.h
+	LINUX_INC += -include $(TOUCH_ROOT)/fts_spi/fts_limits.h
+	LINUX_INC += -include $(TOUCH_ROOT)/fts_spi/fts.h
+
+	ccflags-y += -DCONFIG_I2C_BY_DMA
+
+	fts_touch_spi-y := \
+		 ./fts_spi/fts_lib/ftsCompensation.o \
+		 ./fts_spi/fts_lib/ftsCore.o \
+		 ./fts_spi/fts_lib/ftsError.o \
+		 ./fts_spi/fts_lib/ftsFrame.o \
+		 ./fts_spi/fts_lib/ftsIO.o \
+		 ./fts_spi/fts_lib/ftsTest.o \
+		 ./fts_spi/fts_lib/ftsTool.o \
+		 ./fts_spi/fts_lib/ftsFlash.o \
+		 ./fts_spi/fts_lib/ftsGesture.o \
+		 ./fts_spi/fts_proc.o \
+		 ./fts_spi/fts.o
+
+	obj-$(CONFIG_MSM_TOUCH) += fts_touch_spi.o
+endif
+
 ifeq ($(CONFIG_TOUCHSCREEN_NT36XXX_I2C), y)
 	LINUX_INC += -include $(TOUCH_ROOT)/nt36xxx/nt36xxx.h
 	LINUX_INC += -include $(TOUCH_ROOT)/nt36xxx/nt36xxx_mem_map.h
