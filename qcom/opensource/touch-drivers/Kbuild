@@ -228,4 +228,13 @@ ifneq ($(CONFIG_ARCH_PINEAPPLE), y)
 
 			obj-$(CONFIG_MSM_TOUCH) += raydium_ts.o
 	endif
+
+	ifeq ($(CONFIG_TOUCHSCREEN_XIAOMI_TOUCHFEATURE), y)
+        LINUX_INC += -include $(TOUCH_ROOT)/xiaomi/xiaomi_touch.h
+
+        xiaomi_touch-y := \
+                 ./xiaomi/xiaomi_touch.o
+
+        obj-$(CONFIG_MSM_TOUCH) += xiaomi_touch.o
+	endif
 endif # pineapple
