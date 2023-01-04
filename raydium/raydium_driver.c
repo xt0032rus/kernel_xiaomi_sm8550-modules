@@ -38,6 +38,7 @@
 #include <linux/of_gpio.h>
 #include <linux/err.h>
 #include <linux/of_device.h>
+#include <linux/soc/qcom/panel_event_notifier.h>
 
 #if defined(CONFIG_FB)
 #include <linux/notifier.h>
@@ -695,7 +696,7 @@ void raydium_irq_control(bool enable)
 		}
 
 		/* Clear interrupts first */
-		if (g_raydium_ts->blank != DRM_PANEL_BLANK_POWERDOWN) {
+		if (g_raydium_ts->blank != DRM_PANEL_EVENT_BLANK_LP) {
 			if (g_u8_i2c_mode == PDA2_MODE) {
 				mutex_lock(&g_raydium_ts->lock);
 				if (raydium_i2c_pda2_set_page(g_raydium_ts->client,
@@ -1202,8 +1203,8 @@ static void raydium_work_handler(struct work_struct *work)
 		}
 	}
 
-	if (g_raydium_ts->blank == DRM_PANEL_BLANK_LP ||
-	g_raydium_ts->blank == DRM_PANEL_BLANK_POWERDOWN || g_raydium_ts->fb_state == FB_OFF) {
+	if (g_raydium_ts->blank == DRM_PANEL_EVENT_BLANK_LP||
+	g_raydium_ts->blank == DRM_PANEL_EVENT_BLANK_LP || g_raydium_ts->fb_state == FB_OFF) {
 		LOGD(LOG_DEBUG, "[touch] elseif u8_tp_status:%x\n", u8_tp_status[POS_GES_STATUS]);
 		/*need check small area*/
 		/*if (u8_tp_status[POS_GES_STATUS] == RAD_WAKE_UP */
@@ -1220,7 +1221,7 @@ static void raydium_work_handler(struct work_struct *work)
 		}
 	}
 	/*when display on can use palm to suspend*/
-	else if (g_raydium_ts->blank == DRM_PANEL_BLANK_UNBLANK) {
+	else if (g_raydium_ts->blank == DRM_PANEL_EVENT_UNBLANK) {
 		if (u8_tp_status[POS_GES_STATUS] == RAD_PALM_ENABLE) {
 			if (g_raydium_ts->is_palm == 0) {
 				/* release all touches*/
@@ -1571,54 +1572,36 @@ static int raydium_ts_resume(struct device *dev)
 
 
 #if defined(CONFIG_DRM)
-/*******************************************************************************
- * FUNCTION: drm_notifier_callback
- *
- * SUMMARY: Call back function for DRM notifier to allow to call
- * resume/suspend attention list.
- *
- * RETURN:
- *   0 = success
- *
- * PARAMETERS:
- * self   - pointer to notifier_block structure
- * event  - event type of fb notifier
- * data   - pointer to fb_event structure
- ******************************************************************************/
-static int drm_notifier_callback(struct notifier_block *self,
-			unsigned long event, void *data)
+static void drm_notifier_callback(enum panel_event_notifier_tag tag,
+		struct panel_event_notification *notification, void *client_data)
 {
-	struct raydium_ts_data *g_raydium_ts =
-		container_of(self, struct raydium_ts_data, fb_notif);
-	struct drm_panel_notifier *evdata = data;
-	int *blank;
+
+	struct raydium_ts_data *g_raydium_ts = client_data;
+	if(!notification)
+	{
+		LOGD(LOG_INFO, "%s: Invalid notification\n", __func__);
+		return ;
+	}
 
 	LOGD(LOG_INFO, "%s: DRM notifier called!\n", __func__);
-
-	if (!evdata)
-		goto exit;
-
-	if (!(event == DRM_PANEL_EARLY_EVENT_BLANK ||
-			event == DRM_PANEL_EVENT_BLANK)) {
-		LOGD(LOG_INFO, "%s: Event(%lu) do not need process\n",
-			__func__, event);
+	if (!(notification->notif_type == DRM_PANEL_EVENT_BLANK)){
+		LOGD(LOG_INFO, "%s: Event(%d do not need process\n",
+			__func__, notification->notif_type);
 		goto exit;
 	}
 
-	blank = evdata->data;
-	g_raydium_ts->blank = (*blank);
-	LOGD(LOG_INFO, "%s: DRM event:%lu,blank:%d fb_state %d ",
-		__func__, event, *blank, g_raydium_ts->fb_state);
-	LOGD(LOG_INFO, "%s: DRM Power - %s - FB state %d ",
-		__func__, (*blank == DRM_PANEL_BLANK_UNBLANK)?"UP":"DOWN", g_raydium_ts->fb_state);
+	LOGD(LOG_INFO, "%s: DRM event:%d fb_state %d ",
+		__func__, notification->notif_type, g_raydium_ts->fb_state);
+	LOGD(LOG_INFO, "%s: DRM Power - %d- FB state %d ",
+		__func__, (notification->notif_type == DRM_PANEL_EVENT_UNBLANK)?"UP":"DOWN", g_raydium_ts->fb_state);
 
-	if (*blank == DRM_PANEL_BLANK_UNBLANK) {
+	if (notification->notif_type == DRM_PANEL_EVENT_UNBLANK) {
 		LOGD(LOG_INFO, "%s: UNBLANK!\n", __func__);
 
-		if (event == DRM_PANEL_EARLY_EVENT_BLANK) {
-			LOGD(LOG_INFO, "%s: resume: event = %lu, not care\n",
-				__func__, event);
-		} else if (event == DRM_PANEL_EVENT_BLANK) {
+		if (notification->notif_type == DRM_PANEL_EVENT_BLANK) {
+			LOGD(LOG_INFO, "%s: resume: event = %d not care\n",
+				__func__, notification->notif_type);
+		} else if (notification->notif_type == DRM_PANEL_EVENT_BLANK) {
 			if (g_raydium_ts->fb_state != FB_ON) {
 				LOGD(LOG_INFO, "%s: Resume notifier called!\n",
 					__func__);
@@ -1634,10 +1617,10 @@ static int drm_notifier_callback(struct notifier_block *self,
 			LOGD(LOG_INFO, "%s: Resume notified!\n", __func__);
 			}
 		}
-	} else if (*blank == DRM_PANEL_BLANK_LP || *blank == DRM_PANEL_BLANK_POWERDOWN
-		|| *blank == DRM_PANEL_BLANK_FPS_CHANGE) {
+	} else if (notification->notif_type == DRM_PANEL_EVENT_BLANK_LP ||
+		notification->notif_type == DRM_PANEL_EVENT_FPS_CHANGE) {
 		LOGD(LOG_INFO, "%s: LOWPOWER!\n", __func__);
-		if (event == DRM_PANEL_EARLY_EVENT_BLANK) {
+		if (notification->notif_type == DRM_PANEL_EVENT_BLANK) {
 			if (g_raydium_ts->fb_state != FB_OFF) {
 				LOGD(LOG_INFO, "%s: Suspend notifier called!\n",
 					__func__);
@@ -1652,16 +1635,16 @@ static int drm_notifier_callback(struct notifier_block *self,
 				g_raydium_ts->fb_state = FB_OFF;
 				LOGD(LOG_INFO, "%s: Suspend notified!\n", __func__);
 			}
-		} else if (event == DRM_PANEL_EVENT_BLANK) {
-			LOGD(LOG_INFO, "%s: suspend: event = %lu, not care\n",
-				__func__, event);
+		} else if (notification->notif_type == DRM_PANEL_EVENT_BLANK) {
+			LOGD(LOG_INFO, "%s: suspend: event = %d not care\n",
+				__func__, notification->notif_type);
 		}
 	} else {
 		LOGD(LOG_INFO, "%s: DRM BLANK(%d) do not need process\n",
-			__func__, *blank);
+			__func__, notification->notif_type);
 	}
 exit:
-	return 0;
+	return ;
 }
 
 /*******************************************************************************
@@ -1674,16 +1657,13 @@ exit:
  *******************************************************************************/
 static void raydium_setup_drm_notifier(struct raydium_ts_data *g_raydium_ts)
 {
-	g_raydium_ts->fb_state = FB_ON;
-	g_raydium_ts->fb_notif.notifier_call = drm_notifier_callback;
-	LOGD(LOG_INFO, "[touch]%s: Setting up drm notifier\n", __func__);
-
+	void *cookie = NULL;
 	if (!active_panel)
-		LOGD(LOG_ERR, "[touch]%s: Active panel not registered!\n", __func__);
+                LOGD(LOG_ERR, "[touch]%s: Active panel not registered!\n", __func__);
 
-	if (active_panel && drm_panel_notifier_register(active_panel,
-		&g_raydium_ts->fb_notif) < 0)
-		LOGD(LOG_ERR, "[touch]%s: Register notifier failed!\n", __func__);
+	cookie = panel_event_notifier_register(PANEL_EVENT_NOTIFICATION_PRIMARY,
+			PANEL_EVENT_NOTIFIER_CLIENT_PRIMARY_TOUCH,
+			active_panel,&drm_notifier_callback, g_raydium_ts);
 }
 #endif /*end of CONFIG_DRM*/
 
@@ -2400,8 +2380,8 @@ void raydium_ts_shutdown(struct i2c_client *client)
 #elif defined(CONFIG_HAS_EARLYSUSPEND)
 	unregister_early_suspend(&g_raydium_ts->early_suspend);
 #elif defined(CONFIG_DRM)
-	if (active_panel)
-		drm_panel_notifier_unregister(active_panel, &g_raydium_ts->fb_notifier);
+if (active_panel)
+	panel_event_notifier_unregister(&g_raydium_ts->fb_notif);
 #endif/*end of CONFIG_FB*/
 	input_unregister_device(g_raydium_ts->input_dev);
 	input_free_device(g_raydium_ts->input_dev);
@@ -2436,8 +2416,8 @@ static int raydium_ts_remove(struct i2c_client *client)
 #elif defined(CONFIG_HAS_EARLYSUSPEND)
 	unregister_early_suspend(&g_raydium_ts->early_suspend);
 #elif defined(CONFIG_DRM)
-	if (active_panel)
-		drm_panel_notifier_unregister(active_panel, &g_raydium_ts->fb_notifier);
+if (active_panel)
+        panel_event_notifier_unregister(&g_raydium_ts->fb_notif);
 #endif/*end of CONFIG_FB*/
 	input_unregister_device(g_raydium_ts->input_dev);
 	input_free_device(g_raydium_ts->input_dev);

@@ -66,6 +66,17 @@ ifeq ($(TOUCH_DLKM_ENABLE),  true)
 	include $(DLKM_DIR)/Build_external_kernelmodule.mk
 	###########################################################
 
+        ###########################################################
+        include $(CLEAR_VARS)
+        LOCAL_SRC_FILES   := $(wildcard $(LOCAL_PATH)/**/*) $(wildcard $(LOCAL_PATH)/*)
+        LOCAL_MODULE              := raydium_ts.ko
+        LOCAL_MODULE_KBUILD_NAME  := raydium_ts.ko
+        LOCAL_MODULE_TAGS         := optional
+        #LOCAL_MODULE_DEBUG_ENABLE := true
+        LOCAL_MODULE_PATH         := $(KERNEL_MODULES_OUT)
+        include $(DLKM_DIR)/Build_external_kernelmodule.mk
+        ###########################################################
+
 	###########################################################
 	include $(CLEAR_VARS)
 	LOCAL_SRC_FILES   := $(wildcard $(LOCAL_PATH)/**/*) $(wildcard $(LOCAL_PATH)/*)
@@ -77,37 +88,39 @@ ifeq ($(TOUCH_DLKM_ENABLE),  true)
 	include $(DLKM_DIR)/Build_external_kernelmodule.mk
 	###########################################################
 
-	###########################################################
-	include $(CLEAR_VARS)
-	LOCAL_SRC_FILES   := $(wildcard $(LOCAL_PATH)/**/*) $(wildcard $(LOCAL_PATH)/*)
-	LOCAL_MODULE              := pt_ts.ko
-	LOCAL_MODULE_KBUILD_NAME  := pt_ts.ko
-	LOCAL_MODULE_TAGS         := optional
-	#LOCAL_MODULE_DEBUG_ENABLE := true
-	LOCAL_MODULE_PATH         := $(KERNEL_MODULES_OUT)
-	include $(DLKM_DIR)/Build_external_kernelmodule.mk
-	###########################################################
+	ifneq ($(TARGET_BOARD_PLATFORM), pineapple)
+		###########################################################
+		include $(CLEAR_VARS)
+		LOCAL_SRC_FILES   := $(wildcard $(LOCAL_PATH)/**/*) $(wildcard $(LOCAL_PATH)/*)
+		LOCAL_MODULE              := pt_ts.ko
+		LOCAL_MODULE_KBUILD_NAME  := pt_ts.ko
+		LOCAL_MODULE_TAGS         := optional
+		#LOCAL_MODULE_DEBUG_ENABLE := true
+		LOCAL_MODULE_PATH         := $(KERNEL_MODULES_OUT)
+		include $(DLKM_DIR)/Build_external_kernelmodule.mk
+		###########################################################
 
-	###########################################################
-	include $(CLEAR_VARS)
-	LOCAL_SRC_FILES   := $(wildcard $(LOCAL_PATH)/**/*) $(wildcard $(LOCAL_PATH)/*)
-	LOCAL_MODULE              := pt_i2c.ko
-	LOCAL_MODULE_KBUILD_NAME  := pt_i2c.ko
-	LOCAL_MODULE_TAGS         := optional
-	#LOCAL_MODULE_DEBUG_ENABLE := true
-	LOCAL_MODULE_PATH         := $(KERNEL_MODULES_OUT)
-	include $(DLKM_DIR)/Build_external_kernelmodule.mk
-	###########################################################
+		###########################################################
+		include $(CLEAR_VARS)
+		LOCAL_SRC_FILES   := $(wildcard $(LOCAL_PATH)/**/*) $(wildcard $(LOCAL_PATH)/*)
+		LOCAL_MODULE              := pt_i2c.ko
+		LOCAL_MODULE_KBUILD_NAME  := pt_i2c.ko
+		LOCAL_MODULE_TAGS         := optional
+		#LOCAL_MODULE_DEBUG_ENABLE := true
+		LOCAL_MODULE_PATH         := $(KERNEL_MODULES_OUT)
+		include $(DLKM_DIR)/Build_external_kernelmodule.mk
+		###########################################################
 
-	###########################################################
-	include $(CLEAR_VARS)
-	LOCAL_SRC_FILES   := $(wildcard $(LOCAL_PATH)/**/*) $(wildcard $(LOCAL_PATH)/*)
-	LOCAL_MODULE              := pt_device_access.ko
-	LOCAL_MODULE_KBUILD_NAME  := pt_device_access.ko
-	LOCAL_MODULE_TAGS         := optional
-	#LOCAL_MODULE_DEBUG_ENABLE := true
-	LOCAL_MODULE_PATH         := $(KERNEL_MODULES_OUT)
-	include $(DLKM_DIR)/Build_external_kernelmodule.mk
-	###########################################################
+		###########################################################
+		include $(CLEAR_VARS)
+		LOCAL_SRC_FILES   := $(wildcard $(LOCAL_PATH)/**/*) $(wildcard $(LOCAL_PATH)/*)
+		LOCAL_MODULE              := pt_device_access.ko
+		LOCAL_MODULE_KBUILD_NAME  := pt_device_access.ko
+		LOCAL_MODULE_TAGS         := optional
+		#LOCAL_MODULE_DEBUG_ENABLE := true
+		LOCAL_MODULE_PATH         := $(KERNEL_MODULES_OUT)
+		include $(DLKM_DIR)/Build_external_kernelmodule.mk
+		###########################################################
+	endif # pineapple
 	endif # DLKM check
 endif

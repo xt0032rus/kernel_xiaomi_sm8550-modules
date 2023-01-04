@@ -2298,7 +2298,7 @@ static int goodix_ts_suspend_helper(void *data)
 {
 	struct goodix_ts_core *core_data = data;
 
-	if (!core_data || core_module_prob_sate != CORE_MODULE_PROB_SUCCESS)
+	if (!core_data || !core_data->ready)
 		return 0;
 
 	return goodix_ts_suspend(core_data);
@@ -2308,7 +2308,7 @@ static int goodix_ts_resume_helper(void *data)
 {
 	struct goodix_ts_core *core_data = data;
 
-	if (!core_data || core_module_prob_sate != CORE_MODULE_PROB_SUCCESS)
+	if (!core_data || !core_data->ready)
 		return 0;
 
 	return goodix_ts_resume(core_data);
@@ -2590,6 +2590,7 @@ skip_to_power_gpio_setup:
 	core_data->init_stage = CORE_INIT_STAGE1;
 	goodix_modules.core_data = core_data;
 	core_module_prob_sate = CORE_MODULE_PROB_SUCCESS;
+	core_data->ready = true;
 
 	/* Try start a thread to get config-bin info */
 	goodix_start_later_init(core_data);

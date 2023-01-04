@@ -136,6 +136,33 @@ ifeq ($(CONFIG_TOUCHSCREEN_DUMMY), y)
 	obj-$(CONFIG_MSM_TOUCH) += dummy_ts.o
 endif
 
+ifeq ($(CONFIG_TOUCHSCREEN_RM_TS), y)
+        LINUX_INC += -include $(TOUCH_ROOT)/raydium/Config.h
+        LINUX_INC += -include $(TOUCH_ROOT)/raydium/drv_interface.h
+        LINUX_INC += -include $(TOUCH_ROOT)/raydium/rad_fw_image_30.h
+        LINUX_INC += -include $(TOUCH_ROOT)/raydium/raydium_driver.h
+        LINUX_INC += -include $(TOUCH_ROOT)/raydium/raydium_selftest.h
+        LINUX_INC += -include $(TOUCH_ROOT)/raydium/tpselftest_30.h
+        LINUX_INC += -include $(TOUCH_ROOT)/raydium/chip_raydium/f303_ic_control.h
+        LINUX_INC += -include $(TOUCH_ROOT)/raydium/chip_raydium/f303_ic_reg.h
+        LINUX_INC += -include $(TOUCH_ROOT)/raydium/chip_raydium/f303_ic_test.h
+        LINUX_INC += -include $(TOUCH_ROOT)/raydium/chip_raydium/ic_drv_global.h
+        LINUX_INC += -include $(TOUCH_ROOT)/raydium/chip_raydium/ic_drv_interface.h
+
+         raydium_ts-y := \
+                 ./raydium/drv_interface.o \
+                 ./raydium/raydium_driver.o \
+                 ./raydium/raydium_fw_update.o \
+                 ./raydium/raydium_selftest.o \
+                 ./raydium/raydium_sysfs.o \
+                 ./raydium/chip_raydium/f303_ic_control.o \
+                 ./raydium/chip_raydium/f303_ic_test.o \
+                 ./raydium/chip_raydium/ic_drv_global.o \
+                 ./raydium/chip_raydium/ic_drv_interface.o
+
+        obj-$(CONFIG_MSM_TOUCH) += raydium_ts.o
+endif
+
 ifeq ($(CONFIG_TOUCHSCREEN_SYNAPTICS_TCM), y)
 	synaptics_tcm_ts-y := \
 		 ./synaptics_tcm/synaptics_tcm_core.o \
@@ -146,39 +173,41 @@ ifeq ($(CONFIG_TOUCHSCREEN_SYNAPTICS_TCM), y)
 
 endif
 
-ifeq ($(CONFIG_TOUCHSCREEN_PARADE), y)
-	LINUX_INC += -include $(TOUCH_ROOT)/pt/pt_regs.h
-	LINUX_INC += -include $(TOUCH_ROOT)/pt/pt_core.h
-	LINUX_INC += -include $(TOUCH_ROOT)/pt/pt_platform.h
+ifneq ($(CONFIG_ARCH_PINEAPPLE), y)
+	ifeq ($(CONFIG_TOUCHSCREEN_PARADE), y)
+		LINUX_INC += -include $(TOUCH_ROOT)/pt/pt_regs.h
+		LINUX_INC += -include $(TOUCH_ROOT)/pt/pt_core.h
+		LINUX_INC += -include $(TOUCH_ROOT)/pt/pt_platform.h
 
-	pt_ts-y := \
-		./pt/pt_core.o \
-		./pt/pt_mt_common.o \
-		./pt/pt_platform.o \
-		./pt/pt_devtree.o \
-		./pt/pt_btn.o \
-		./pt/pt_mtb.o \
-		./pt/pt_proximity.o
+		pt_ts-y := \
+			./pt/pt_core.o \
+			./pt/pt_mt_common.o \
+			./pt/pt_platform.o \
+			./pt/pt_devtree.o \
+			./pt/pt_btn.o \
+			./pt/pt_mtb.o \
+			./pt/pt_proximity.o
 
-	obj-$(CONFIG_MSM_TOUCH) += pt_ts.o
-endif
+		obj-$(CONFIG_MSM_TOUCH) += pt_ts.o
+	endif
 
-ifeq ($(CONFIG_TOUCHSCREEN_PARADE_I2C), y)
-	LINUX_INC += -include $(TOUCH_ROOT)/pt/pt_regs.h
+	ifeq ($(CONFIG_TOUCHSCREEN_PARADE_I2C), y)
+		LINUX_INC += -include $(TOUCH_ROOT)/pt/pt_regs.h
 
-	pt_i2c-y := \
-		./pt/pt_i2c.o
+		pt_i2c-y := \
+			./pt/pt_i2c.o
 
-	obj-$(CONFIG_MSM_TOUCH) += pt_i2c.o
-endif
+		obj-$(CONFIG_MSM_TOUCH) += pt_i2c.o
+	endif
 
-ifeq ($(CONFIG_TOUCHSCREEN_PARADE_DEVICE_ACCESS), y)
-	LINUX_INC += -include $(TOUCH_ROOT)/pt/pt_regs.h
+	ifeq ($(CONFIG_TOUCHSCREEN_PARADE_DEVICE_ACCESS), y)
+		LINUX_INC += -include $(TOUCH_ROOT)/pt/pt_regs.h
 
-	pt_device_access-y := \
-		./pt/pt_device_access.o
+		pt_device_access-y := \
+			./pt/pt_device_access.o
 
-	obj-$(CONFIG_MSM_TOUCH) += pt_device_access.o
-endif
+		obj-$(CONFIG_MSM_TOUCH) += pt_device_access.o
+	endif
+endif # pineapple
 
 CDEFINES += -DBUILD_TIMESTAMP=\"$(shell date -u +'%Y-%m-%dT%H:%M:%SZ')\"
