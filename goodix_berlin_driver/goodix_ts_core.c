@@ -1,7 +1,7 @@
  /*
   * Goodix Touchscreen Driver
   * Copyright (C) 2020 - 2021 Goodix, Inc.
-  * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
+  * Copyright (c) 2022-2023 Qualcomm Innovation Center, Inc. All rights reserved.
   *
   * This program is free software; you can redistribute it and/or modify
   * it under the terms of the GNU General Public License as published by
@@ -2579,6 +2579,19 @@ static int goodix_ts_probe(struct platform_device *pdev)
 #ifdef CONFIG_ARCH_QTI_VM
 skip_to_power_gpio_setup:
 #endif
+
+	qts_en = of_property_read_bool(node, "goodix,qts_en");
+	if (qts_en) {
+		mutex_init(&core_data->tui_transition_lock);
+		goodix_ts_fill_qts_vendor_data(&qts_vendor_data, core_data);
+
+		ret = qts_client_register(qts_vendor_data);
+		if (ret) {
+			pr_err("qts client register failed, rc %d\n", ret);
+			goto err_out;
+		}
+		core_data->qts_en = qts_en;
+	}
 
 	/* generic notifier callback */
 	core_data->ts_notifier.notifier_call = goodix_generic_noti_callback;
