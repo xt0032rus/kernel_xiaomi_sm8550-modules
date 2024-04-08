@@ -569,6 +569,7 @@ static inline bool _sde_encoder_is_single_lm_partial_update(struct sde_encoder_p
 				(sde_kms_rect_is_null(&cstate->lm_roi[0]) &&
 				!sde_kms_rect_is_null(&cstate->lm_roi[1]));
 
+	SDE_EVT32(lr_only_pu,cstate->lm_roi[0].w, cstate->lm_roi[0].h, cstate->lm_roi[1].w, cstate->lm_roi[1].h);
 	return lr_only_pu;
 }
 
@@ -583,7 +584,7 @@ static void _sde_encoder_phys_wb_setup_cwb(struct sde_encoder_phys *phys_enc, bo
 	struct sde_hw_dnsc_blur *hw_dnsc_blur = phys_enc->hw_dnsc_blur;
 	bool need_merge = false;
 	enum sde_dcwb;
-	int i = 0, num_mixers = 0;
+	int i = 0, num_mixers = crtc->num_mixers;
 	const int num_wb = 1;
 
 	if (!phys_enc->in_clone_mode) {
@@ -618,6 +619,7 @@ static void _sde_encoder_phys_wb_setup_cwb(struct sde_encoder_phys *phys_enc, bo
 		num_mixers = crtc->num_mixers;
 	}
 
+	SDE_EVT32(need_merge, num_mixers);
 	hw_ctl = crtc->mixers[0].hw_ctl;
 	if (hw_ctl && hw_ctl->ops.setup_intf_cfg_v1 &&
 			(test_bit(SDE_WB_CWB_CTRL, &hw_wb->caps->features) ||
@@ -707,6 +709,7 @@ static void _sde_encoder_phys_wb_setup_ctl(struct sde_encoder_phys *phys_enc,
 	hw_dnsc_blur = phys_enc->hw_dnsc_blur;
 	ctl = phys_enc->hw_ctl;
 	need_merge = !(_sde_encoder_is_single_lm_partial_update(wb_enc));
+	SDE_EVT32(need_merge);
 
 	if (test_bit(SDE_CTL_ACTIVE_CFG, &ctl->caps->features) &&
 			(phys_enc->hw_ctl && phys_enc->hw_ctl->ops.setup_intf_cfg_v1)) {
@@ -1389,6 +1392,7 @@ static void _sde_encoder_phys_wb_update_cwb_flush(struct sde_encoder_phys *phys_
 	cwb_idx = (enum sde_cwb)hw_pp->idx;
 	dspp_out = (cwb_capture_mode == CAPTURE_DSPP_OUT);
 	need_merge = !(_sde_encoder_is_single_lm_partial_update(wb_enc));
+	SDE_EVT32(need_merge);
 
 	if (test_bit(SDE_WB_DCWB_CTRL, &hw_wb->caps->features)) {
 		dcwb_idx = hw_pp->dcwb_idx;
