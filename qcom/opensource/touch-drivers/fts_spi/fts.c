@@ -4680,9 +4680,15 @@ static void fts_gesture_event_handler(struct fts_ts_info *info,
 		case GEST_ID_DBLTAP:
 			if (!info->gesture_enabled)
 				goto gesture_done;
-			value = KEY_WAKEUP;
 			logError(1, "%s %s: double tap ! \n", tag, __func__);
-			needCoords = 0;
+			input_report_key(info->input_dev, KEY_WAKEUP, 1);
+			input_sync(info->input_dev);
+			input_report_key(info->input_dev, KEY_WAKEUP, 0);
+			input_sync(info->input_dev);
+			notify_gesture_double_tap();
+			info->sleep_finger = 0;
+			info->fod_overlap = 0;
+			goto gesture_done;
 			break;
 
 		case GEST_ID_AT:
