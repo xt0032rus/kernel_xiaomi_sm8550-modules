@@ -4666,10 +4666,10 @@ static void fts_gesture_event_handler(struct fts_ts_info *info,
 			goto gesture_done;
 		} else if (event[2] == GEST_ID_SINGTAP) {
 			logError(1, "%s %s: single tap ! \n", tag, __func__);
-			input_report_key(info->input_dev, KEY_GOTO, 1);
-			input_sync(info->input_dev);
-			input_report_key(info->input_dev, KEY_GOTO, 0);
-			input_sync(info->input_dev);
+			//input_report_key(info->input_dev, KEY_GOTO, 1);
+			//input_sync(info->input_dev);
+			//input_report_key(info->input_dev, KEY_GOTO, 0);
+			//input_sync(info->input_dev);
 			notify_gesture_single_tap();
 			info->sleep_finger = 0;
 			info->fod_overlap = 0;
@@ -4681,10 +4681,10 @@ static void fts_gesture_event_handler(struct fts_ts_info *info,
 			if (!info->gesture_enabled)
 				goto gesture_done;
 			logError(1, "%s %s: double tap ! \n", tag, __func__);
-			input_report_key(info->input_dev, KEY_WAKEUP, 1);
-			input_sync(info->input_dev);
-			input_report_key(info->input_dev, KEY_WAKEUP, 0);
-			input_sync(info->input_dev);
+			//input_report_key(info->input_dev, KEY_WAKEUP, 1);
+			//input_sync(info->input_dev);
+			//input_report_key(info->input_dev, KEY_WAKEUP, 0);
+			//input_sync(info->input_dev);
 			notify_gesture_double_tap();
 			info->sleep_finger = 0;
 			info->fod_overlap = 0;
