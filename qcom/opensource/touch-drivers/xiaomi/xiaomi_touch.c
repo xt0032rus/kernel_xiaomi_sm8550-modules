@@ -1660,6 +1660,50 @@ static ssize_t gesture_single_tap_value_show(struct device *dev,
 	return snprintf(buf, PAGE_SIZE, "%d\n", 1);
 }
 
+static ssize_t gesture_single_tap_enable_show(struct device *dev,
+				     struct device_attribute *attr,
+					     char *buf)
+{
+	struct xiaomi_touch_interface *touch_data = NULL;
+
+	if (!touch_pdata) {
+		return -ENOMEM;
+	}
+
+	touch_data = touch_pdata->touch_data[0];
+
+	if (!touch_data->getModeValue)
+		return -ENOMEM;
+
+	return snprintf(buf, PAGE_SIZE, "%d\n",
+			touch_data->getModeValue(Touch_Aod_Enable, GET_CUR_VALUE));
+}
+
+static ssize_t gesture_single_tap_enable_store(struct device *dev,
+				     struct device_attribute *attr,
+				     const char *buf, size_t count)
+{
+	unsigned int input;
+	struct xiaomi_touch_interface *touch_data = NULL;
+
+	if (!touch_pdata) {
+		return -ENOMEM;
+	}
+
+	touch_data = touch_pdata->touch_data[0];
+
+	if (!touch_data->setModeValue)
+		return -ENOMEM;
+
+	if (sscanf(buf, "%d", &input) < 0 || input > 1)
+		return -EINVAL;
+
+	pr_info("%s,%d\n", __func__, input);
+	touch_data->setModeValue(Touch_Aod_Enable, input);
+
+	return count;
+}
+
 int notify_gesture_double_tap(void)
 {
 	mutex_lock(&xiaomi_touch_dev.gesture_double_tap_mutex);
@@ -1675,6 +1719,50 @@ static ssize_t gesture_double_tap_value_show(struct device *dev,
 					     char *buf)
 {
 	return snprintf(buf, PAGE_SIZE, "%d\n", 1);
+}
+
+static ssize_t gesture_double_tap_enable_show(struct device *dev,
+				     struct device_attribute *attr,
+					     char *buf)
+{
+	struct xiaomi_touch_interface *touch_data = NULL;
+
+	if (!touch_pdata) {
+		return -ENOMEM;
+	}
+
+	touch_data = touch_pdata->touch_data[0];
+
+	if (!touch_data->getModeValue)
+		return -ENOMEM;
+
+	return snprintf(buf, PAGE_SIZE, "%d\n",
+			touch_data->getModeValue(Touch_Doubletap_Mode, GET_CUR_VALUE));
+}
+
+static ssize_t gesture_double_tap_enable_store(struct device *dev,
+				     struct device_attribute *attr,
+				     const char *buf, size_t count)
+{
+	unsigned int input;
+	struct xiaomi_touch_interface *touch_data = NULL;
+
+	if (!touch_pdata) {
+		return -ENOMEM;
+	}
+
+	touch_data = touch_pdata->touch_data[0];
+
+	if (!touch_data->setModeValue)
+		return -ENOMEM;
+
+	if (sscanf(buf, "%d", &input) < 0 || input > 1)
+		return -EINVAL;
+
+	pr_info("%s,%d\n", __func__, input);
+	touch_data->setModeValue(Touch_Doubletap_Mode, input);
+
+	return count;
 }
 
 static ssize_t fod_press_status_show(struct device *dev,
@@ -2173,8 +2261,14 @@ static DEVICE_ATTR(fod_press_status, (0664), fod_press_status_show, NULL);
 static DEVICE_ATTR(gesture_single_tap_state, (0664),
 		   gesture_single_tap_value_show, NULL);
 
+static DEVICE_ATTR(gesture_single_tap_enable, (0664),
+		   gesture_single_tap_enable_show, gesture_single_tap_enable_store);
+
 static DEVICE_ATTR(gesture_double_tap_state, (0664),
 		   gesture_double_tap_value_show, NULL);
+
+static DEVICE_ATTR(gesture_double_tap_enable, (0664),
+		   gesture_double_tap_enable_show, gesture_double_tap_enable_store);
 
 static DEVICE_ATTR(resolution_factor, 0644, resolution_factor_show, NULL);
 
@@ -2215,7 +2309,9 @@ static struct attribute *touch_attr_group[] = {
 	&dev_attr_suspend_state.attr,
 	&dev_attr_fod_press_status.attr,
 	&dev_attr_gesture_single_tap_state.attr,
+	&dev_attr_gesture_single_tap_enable.attr,
 	&dev_attr_gesture_double_tap_state.attr,
+	&dev_attr_gesture_double_tap_enable.attr,
 	&dev_attr_resolution_factor.attr,
 	&dev_attr_touch_active_status.attr,
 	&dev_attr_touch_finger_status.attr,
