@@ -6846,10 +6846,15 @@ static int fts_set_cur_value(int mode, int value)
 		xiaomi_touch_interfaces.touch_mode[mode][GET_CUR_VALUE] = value;
 		return fts_set_fod_status(value);
 	}
-	if (mode == Touch_Aod_Enable && fts_info && value >= 0)
+	if (mode == Touch_Aod_Enable && fts_info && value >= 0) {
+		xiaomi_touch_interfaces.touch_mode[mode][SET_CUR_VALUE] = value;
+		xiaomi_touch_interfaces.touch_mode[mode][GET_CUR_VALUE] = value;
 		return fts_set_aod_status(value);
+	}
 	if (mode == Touch_Doubletap_Mode && fts_info && value >= 0) {
 		fts_info->gesture_enabled = value;
+		xiaomi_touch_interfaces.touch_mode[mode][SET_CUR_VALUE] = value;
+		xiaomi_touch_interfaces.touch_mode[mode][GET_CUR_VALUE] = value;
 		schedule_work(&fts_info->switch_mode_work);
 		return 0;
 	}
