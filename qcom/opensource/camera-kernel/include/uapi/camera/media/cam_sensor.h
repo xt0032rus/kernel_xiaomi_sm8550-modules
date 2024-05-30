@@ -65,8 +65,12 @@ enum cam_actuator_packet_opcodes {
 	CAM_ACTUATOR_PACKET_AUTO_MOVE_LENS,
 	CAM_ACTUATOR_PACKET_MANUAL_MOVE_LENS,
 	CAM_ACTUATOR_PACKET_OPCODE_READ,
+#ifdef CONFIG_MI_CAMERA_FUXI
+	CAM_ACTUATOR_PACKET_OPCODE_PARKLENS  // xiaomi add
+#else
 	CAM_ACTUATOR_PACKET_OPCODE_PARKLENS, // xiaomi add
 	CAM_ACTUATOR_PACKET_OPCODE_WRITE     // xiaomi add
+#endif
 };
 
 enum cam_eeprom_packet_opcodes {
@@ -78,10 +82,14 @@ enum cam_ois_packet_opcodes {
 	CAM_OIS_PACKET_OPCODE_INIT,
 	CAM_OIS_PACKET_OPCODE_OIS_CONTROL,
 	CAM_OIS_PACKET_OPCODE_READ,
+#ifdef CONFIG_MI_CAMERA_FUXI
+	CAM_OIS_PACKET_OPCODE_WRITE_TIME
+#else
 	CAM_OIS_PACKET_OPCODE_WRITE_TIME,
 	CAM_OIS_PACKET_OPCODE_OIS_MANUAL_MODE,
 	CAM_OIS_PACKET_OPCODE_INIT_SECOND,
 	CAM_OIS_PACKET_OPCODE_OIS_PARKLENS,
+#endif
 };
 
 enum camera_sensor_i2c_op_code {
@@ -122,7 +130,9 @@ enum cam_sensor_packet_opcodes {
 	CAM_SENSOR_PACKET_OPCODE_SENSOR_PROBE_V2,
 	CAM_SENSOR_PACKET_OPCODE_SENSOR_REG_BANK_UNLOCK,
 	CAM_SENSOR_PACKET_OPCODE_SENSOR_REG_BANK_LOCK,
+#ifndef CONFIG_MI_CAMERA_FUXI
 	CAM_SENSOR_PACKET_OPCODE_SENSOR_WRITE,  //xiaomi add
+#endif
 	CAM_SENSOR_PACKET_OPCODE_SENSOR_NOP = 127,
 };
 
@@ -352,8 +362,10 @@ struct cam_ois_opcode {
 	__u32 memory;
 	__u8 fw_addr_type;
 	__u8 is_addr_increase;
+#ifndef CONFIG_MI_CAMERA_FUXI
 	__u16 fw_download_type;
 	__u32 fw_version;
+#endif
 	__u8 customized_ois_flag;
 } __attribute__((packed));
 
@@ -650,7 +662,9 @@ struct cam_csiphy_info {
 	__u8     secure_mode;
 	__u64    settle_time;
 	__u64    data_rate;
+#ifndef CONFIG_MI_CAMERA_FUXI
 	bool     is_modify_onthego;
+#endif
 } __attribute__((packed));
 
 /**

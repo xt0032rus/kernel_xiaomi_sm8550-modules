@@ -877,9 +877,11 @@ struct cam_req_mgr_pf_err_msg {
 };
 
 // xiaomi add
+#ifndef CONFIG_MI_CAMERA_FUXI
 #define V4L_EVENT_CAM_MQS_EVENT           (V4L2_EVENT_PRIVATE_START + 7)
 #define V4L_EVENT_CAM_MQS_ISP             1
 #define V4L_EVENT_CAM_MQS_BUBBLE          (V4L_EVENT_CAM_MQS_ISP << 16) + 1
+#endif /* CONFIG_MI_CAMERA_FUXI */
 // xiaomi add
 
 /**
