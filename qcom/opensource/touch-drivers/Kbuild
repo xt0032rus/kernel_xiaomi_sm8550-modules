@@ -7,8 +7,19 @@ ifeq ($(CONFIG_ARCH_WAIPIO), y)
 endif
 
 ifeq ($(CONFIG_ARCH_KALAMA), y)
-	include $(TOUCH_ROOT)/config/gki_kalamatouch.conf
-	LINUX_INC += -include $(TOUCH_ROOT)/config/gki_kalamatouchconf.h
+  ifdef CONFIG_TARGET_PRODUCT_FUXI
+		include $(TOUCH_ROOT)/config/gki_fuxitouch.conf
+		LINUX_INC += -include $(TOUCH_ROOT)/config/gki_fuxitouchconf.h
+  else ifdef CONFIG_TARGET_PRODUCT_ISHTAR
+		include $(TOUCH_ROOT)/config/gki_ishtartouch.conf
+		LINUX_INC += -include $(TOUCH_ROOT)/config/gki_ishtartouchconf.h
+  else ifdef CONFIG_TARGET_PRODUCT_NUWA
+		include $(TOUCH_ROOT)/config/gki_nuwatouch.conf
+		LINUX_INC += -include $(TOUCH_ROOT)/config/gki_nuwatouchconf.h
+  else
+		include $(TOUCH_ROOT)/config/gki_kalamatouch.conf
+		LINUX_INC += -include $(TOUCH_ROOT)/config/gki_kalamatouchconf.h
+	endif
 endif
 
 ifeq ($(CONFIG_ARCH_KHAJE), y)
