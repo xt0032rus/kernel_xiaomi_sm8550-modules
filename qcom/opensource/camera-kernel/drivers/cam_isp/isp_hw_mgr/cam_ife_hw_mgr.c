@@ -6421,7 +6421,7 @@ static int cam_ife_mgr_config_hw(void *hw_mgr_priv,
 			(ctx->ctx_config & CAM_IFE_CTX_CFG_SW_SYNC_ON)) {
 			rem_jiffies = cam_common_wait_for_completion_timeout(
 				&ctx->config_done_complete,
-				msecs_to_jiffies(500));
+				msecs_to_jiffies(60));
 			if (rem_jiffies == 0) {
 				CAM_ERR(CAM_ISP,
 					"config done completion timeout for req_id=%llu ctx_index %d",
@@ -11738,28 +11738,19 @@ static int cam_ife_mgr_prepare_hw_update(void *hw_mgr_priv,
 	if (prepare->num_out_map_entries &&
 		prepare->num_in_map_entries &&
 		ctx->flags.is_offline) {
-		uint32_t offlineIdx;
-		for (offlineIdx = 0; offlineIdx < ctx->num_base; offlineIdx++) {
-			if(ctx->ctx_type != CAM_IFE_CTX_TYPE_SFE &&
-				ctx->base[offlineIdx].hw_type == CAM_ISP_HW_TYPE_IFE_CSID)
-				break;
-			else if(ctx->ctx_type == CAM_IFE_CTX_TYPE_SFE &&
-				ctx->base[offlineIdx].hw_type == CAM_ISP_HW_TYPE_CSID)
-				break;
-		}
 		if (ctx->ctx_type != CAM_IFE_CTX_TYPE_SFE)
 			rc = cam_isp_add_go_cmd(prepare, &ctx->res_list_ife_in_rd,
-				ctx->base[offlineIdx].idx, &prepare_hw_data->kmd_cmd_buff_info);
+				ctx->base[i].idx, &prepare_hw_data->kmd_cmd_buff_info);
 		else
 			rc = cam_isp_add_csid_offline_cmd(prepare,
 				&ctx->res_list_ife_csid,
-				ctx->base[offlineIdx].idx, &prepare_hw_data->kmd_cmd_buff_info);
+				ctx->base[i].idx, &prepare_hw_data->kmd_cmd_buff_info);
 		if (rc)
 			CAM_ERR(CAM_ISP,
 				"Add %s GO_CMD faled i: %d, idx: %d, rc: %d",
 				(ctx->ctx_type == CAM_IFE_CTX_TYPE_SFE ?
 				"CSID" : "IFE RD"),
-				i, ctx->base[offlineIdx].idx, rc);
+				i, ctx->base[i].idx, rc);
 	}
 
 	if (prepare_hw_data->kmd_cmd_buff_info.size <=

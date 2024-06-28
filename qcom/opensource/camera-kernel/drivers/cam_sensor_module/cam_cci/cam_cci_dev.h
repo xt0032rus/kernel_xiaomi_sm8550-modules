@@ -141,7 +141,6 @@ struct cam_cci_master_info {
 	struct mutex freq_cnt_lock;
 	uint16_t freq_ref_cnt;
 	bool is_initilized;
-	struct mutex master_mutex;
 };
 
 struct cam_cci_clk_params_t {
