@@ -189,6 +189,7 @@ extern int icnss_wlan_disable(struct device *dev, enum icnss_driver_mode mode);
 extern void icnss_enable_irq(struct device *dev, unsigned int ce_id);
 extern void icnss_disable_irq(struct device *dev, unsigned int ce_id);
 extern int icnss_get_soc_info(struct device *dev, struct icnss_soc_info *info);
+extern int icnss_request_bus_bandwidth(struct device *dev, int bandwidth);
 extern int icnss_ce_free_irq(struct device *dev, unsigned int ce_id, void *ctx);
 extern int icnss_ce_request_irq(struct device *dev, unsigned int ce_id,
 	irqreturn_t (*handler)(int, void *),
@@ -246,4 +247,8 @@ extern void icnss_allow_l1(struct device *dev);
 extern int icnss_get_mhi_state(struct device *dev);
 extern int icnss_is_pci_ep_awake(struct device *dev);
 extern unsigned long icnss_get_device_config(void);
+extern int icnss_register_driver_async_data_cb(struct device *dev, void *cb_ctx,
+					       int (*cb)(void *ctx,
+					       uint16_t type, void *event,
+					       int event_len));
 #endif /* _ICNSS_WLAN_H_ */

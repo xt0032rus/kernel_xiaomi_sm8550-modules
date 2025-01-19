@@ -373,6 +373,7 @@ int sde_encoder_wait_for_event(struct drm_encoder *drm_encoder,
  */
 int sde_encoder_idle_request(struct drm_encoder *drm_enc);
 
+
 /**
  * sde_encoder_update_complete_commit - when there is DMS FPS switch in old_crtc_state,
  *					decrease DSI clocks as per low fps.
@@ -651,13 +652,6 @@ static inline u32 sde_encoder_get_dfps_maxfps(struct drm_encoder *drm_enc)
 
 	return sde_enc->mode_info.dfps_maxfps;
 }
-
-/**
- * sde_encoder_vid_wait_for_active - wait Vactive region for some mark region
- * @drm_enc:    Pointer to drm encoder structure
- * @Return:     non zero value if wait timeout occurred
- */
-int sde_encoder_vid_wait_for_active(struct drm_encoder *enc);
 
 /**
  * sde_encoder_virt_reset - delay encoder virt reset

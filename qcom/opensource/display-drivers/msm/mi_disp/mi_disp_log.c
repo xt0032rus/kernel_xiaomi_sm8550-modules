@@ -26,7 +26,6 @@
 #include "mi_disp_log.h"
 #include "mi_disp_print.h"
 #include "mi_disp_core.h"
-#include "sde_trace.h"
 
 #if MI_DISP_LOG_ENABLE
 
@@ -34,10 +33,6 @@
 
 /* DISP_LOG_BUF_SIZE = 4K */
 #define DISP_LOG_BUF_SIZE 0x1000
-
-/* DISP_LOG_WAIT_LIMMIT = 1K */
-#define DISP_LOG_WAIT_LIMMIT 0x400
-
 
 enum disp_log_type {
 	LOG_TYPE_KERNEL = 0,   /* mi display kernel log */
@@ -49,8 +44,6 @@ enum disp_log_type {
 struct log_pos {
 	u32 wrap;
 	u32 offset;
-	u32 lastoffset;
-	u32 remainsize;
 };
 
 /* Log ring buffer */
@@ -72,7 +65,6 @@ struct disp_log {
 	bool initialized;
 	struct mutex lock;
 	struct log_buf log[LOG_TYPE_MAX];
-	struct disp_log_read *read_ptr;
 };
 
 struct disp_log_read {
@@ -93,7 +85,7 @@ bool mi_disp_log_is_initialized(void)
 static int mi_disp_log_printk_func(struct log_buf *log_buf,
 		const char *fmt, va_list args)
 {
-	static char textbuf[1024];
+	static char textbuf[256];
 	char *text = textbuf;
 	u64 ts_usec,ts_sec;
 	u32 text_len;
@@ -101,13 +93,15 @@ static int mi_disp_log_printk_func(struct log_buf *log_buf,
 	int i;
 
 	spin_lock_irqsave(&log_buf->lock,flags);
+
 	ts_usec = local_clock()/1000;
 	ts_sec = ts_usec/1000000;
 	ts_usec %= 1000000;
-	text_len = snprintf(text, sizeof(textbuf), "Timestamp:[%5lld.%06lld] ",
+	text_len = snprintf(text, sizeof(textbuf), "[%5lld.%06lld] ",
 					ts_sec, ts_usec);
 	text_len += vsnprintf(text + text_len, sizeof(textbuf) - text_len,
 					fmt, args);
+
 	for (i = 0; i < text_len; i++) {
 		log_buf->buf[log_buf->pos.offset++] = *text++;
 		if (log_buf->pos.offset == log_buf->size) {
@@ -115,11 +109,7 @@ static int mi_disp_log_printk_func(struct log_buf *log_buf,
 			++log_buf->pos.wrap;
 		}
 	}
-	if (log_buf->pos.offset >= log_buf->pos.lastoffset) {
-		log_buf->pos.remainsize = DISP_LOG_BUF_SIZE - log_buf->pos.offset + log_buf->pos.lastoffset;
-	} else {
-		log_buf->pos.remainsize = log_buf->pos.lastoffset - log_buf->pos.offset;
-	}
+
 	spin_unlock_irqrestore(&log_buf->lock, flags);
 
 	return text_len;
@@ -135,16 +125,16 @@ static int mi_disp_log_kenrel_printk(const char *fmt, ...)
 		DISP_ERROR("mi disp_log not initialized!\n");
 		return -ENODEV;
 	}
+
 	log_buf = &g_disp_log->log[LOG_TYPE_KERNEL];
 
 	va_start(args, fmt);
 	rc = mi_disp_log_printk_func(log_buf, fmt, args);
 	va_end(args);
 
-	if (atomic_read(&log_buf->wait) && log_buf->pos.remainsize < DISP_LOG_WAIT_LIMMIT) {
+	if (atomic_read(&log_buf->wait)) {
 		atomic_set(&log_buf->wait, 0);
 		wake_up_all(&log_buf->wq_head);
-		log_buf->pos.lastoffset = log_buf->pos.offset;
 	}
 	return rc;
 }
@@ -213,30 +203,6 @@ void disp_log_printk_utc(const char *format, ...)
 }
 EXPORT_SYMBOL(disp_log_printk_utc);
 
-void disp_kernel_timer_log_printk(const char *format, ...)
-{
-	struct timespec64 tv;
-	struct rtc_time tm;
-	unsigned long local_time;
-	struct va_format vaf;
-	va_list args;;
-	ktime_get_real_ts64(&tv);
-	/* Convert rtc to local time */
-	local_time = (u32)(tv.tv_sec - (sys_tz.tz_minuteswest * 60));
-	rtc_time64_to_tm(local_time, &tm);
-	va_start(args, format);
-	vaf.fmt = format;
-	vaf.va = &args;
-	mi_disp_log_kenrel_printk("[%04d-%02d-%02d %02d:%02d:%02d.%06lu] %pV",
-			tm.tm_year+1900,
-			tm.tm_mon + 1, tm.tm_mday,
-			tm.tm_hour, tm.tm_min,
-			tm.tm_sec, tv.tv_nsec / 1000, &vaf);
-	va_end(args);
-}
-EXPORT_SYMBOL(disp_kernel_timer_log_printk);
-
-
 static int mi_disp_log_read_stats(struct log_buf *log,
 		struct disp_log_read *read_ptr, size_t count)
 {
@@ -270,6 +236,18 @@ static int mi_disp_log_read_stats(struct log_buf *log,
 		log_start->offset = log->pos.offset + 1;
 	}
 
+	while (log_start->offset == log->pos.offset) {
+		/*
+		 * No data in ring buffer,
+		 * so we'll hang around until something happens
+		 */
+		atomic_set(&log->wait, 1);
+		if (wait_event_freezable(log->wq_head, atomic_read(&log->wait) == 0)) {
+			/* Some event woke us up, so let's quit */
+			return 0;
+		}
+	}
+
 	max_len = (count > DISP_LOG_BUF_SIZE) ? DISP_LOG_BUF_SIZE : count;
 
 	/* Read from ring buff while there is data and space in return buff */
@@ -279,9 +257,6 @@ static int mi_disp_log_read_stats(struct log_buf *log,
 		if (log_start->offset == 0)
 			++log_start->wrap;
 		++len;
-	}
-	if (log_start->offset == log->pos.offset) {
-		atomic_set(&log->wait, 1);
 	}
 
 	return len;
@@ -424,76 +399,64 @@ static ssize_t mi_disp_log_read(struct file *file, char __user *buf,
 {
 	struct disp_log *disp_log =
 			(struct disp_log *)file->private_data;
-	struct log_buf *log_buf = &disp_log->log[LOG_TYPE_KERNEL];
+	struct log_buf *log_buf = &disp_log->log[LOG_TYPE_USER];
+	size_t max_len = log_buf->pos.wrap ? log_buf->size : log_buf->pos.offset;
 	size_t read_len = 0;
 	ssize_t ret;
-	struct disp_log_read *read_ptr =  disp_log->read_ptr;
-	ret = mutex_lock_interruptible(&read_ptr->lock);
+
+	ret = mutex_lock_interruptible(&disp_log->lock);
 	if (ret)
 		return ret;
-	read_len = mi_disp_log_read_stats(log_buf, read_ptr, count);
-	if (read_len > count)
+
+	if (count > max_len)
+		read_len = max_len;
+	else
 		read_len = count;
-	if (*ppos >= read_len) {
-		ret = 0;
-		goto out;
+
+	if (log_buf->pos.wrap) {
+		if (log_buf->pos.offset + read_len < log_buf->size) {
+			if (copy_to_user(buf, &log_buf->buf[log_buf->pos.offset],
+					read_len)) {
+				ret = -EFAULT;
+				goto out;
+			}
+		} else {
+			if (copy_to_user(buf, &log_buf->buf[log_buf->pos.offset],
+					log_buf->size - log_buf->pos.offset)) {
+				ret = -EFAULT;
+				goto out;
+			}
+			if (copy_to_user(buf + log_buf->size - log_buf->pos.offset,
+					&log_buf->buf[log_buf->pos.offset],
+					read_len - (log_buf->size - log_buf->pos.offset))) {
+				ret = -EFAULT;
+				goto out;
+			}
+		}
+	} else {
+		if (copy_to_user(buf, log_buf->buf, read_len)) {
+			ret = -EFAULT;
+			goto out;
+		}
 	}
-	if (copy_to_user(buf, read_ptr->buf, read_len)) {
-		ret = -EFAULT;
-		goto out;
-	}
+
 	ret = read_len;
 out:
-	mutex_unlock(&read_ptr->lock);
+	mutex_unlock(&disp_log->lock);
 	return ret;
 }
 
 int mi_disp_log_open(struct inode *inode, struct file *file)
 {
-	struct disp_log_read *read_ptr = NULL;
-
 	file->private_data = g_disp_log;
-
-	if(g_disp_log->read_ptr) {
-		DISP_ERROR("dev is opend \n");
-		return -ENOMEM;
-	}
-	read_ptr = kzalloc(sizeof(struct disp_log_read), GFP_KERNEL);
-	if (!read_ptr)
-		return -ENOMEM;
-	mutex_init(&read_ptr->lock);
-	g_disp_log->read_ptr = read_ptr;
 	return 0;
 }
-__poll_t mi_disp_log_poll(struct file *filp, struct poll_table_struct *wait)
-{
-	struct disp_log* disp_log= filp->private_data;
-	__poll_t mask = 0;
-	poll_wait(filp, &(disp_log->log[LOG_TYPE_KERNEL].wq_head), wait);
-	if (!atomic_read(&disp_log->log[LOG_TYPE_KERNEL].wait))
-		mask |= EPOLLIN | EPOLLRDNORM;
-	return mask;
-}
- int mi_disp_log_release(struct inode *inode, struct file *file)
-{
-	struct disp_log* disp_log= file->private_data;
-	if (!disp_log)
-		return 0;
-	mutex_destroy(&disp_log->read_ptr->lock);
-	kfree(disp_log->read_ptr);
-	disp_log->read_ptr = NULL;
-	return 0;
-}
-
 
 const struct file_operations disp_log_fops = {
 	.owner = THIS_MODULE,
 	.open = mi_disp_log_open,
 	.read = mi_disp_log_read,
 	.write = mi_disp_log_write,
-	.release = mi_disp_log_release,
-	.poll = mi_disp_log_poll,
-	.llseek          = no_llseek,
 };
 
 static ssize_t info_show(struct device *device,

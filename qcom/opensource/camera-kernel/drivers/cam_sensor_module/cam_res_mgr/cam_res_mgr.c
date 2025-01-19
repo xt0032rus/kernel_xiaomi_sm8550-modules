@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2017-2021, The Linux Foundation. All rights reserved.
- * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022, 2024 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #include <linux/init.h>
@@ -10,7 +10,6 @@
 #include <linux/platform_device.h>
 #include <linux/slab.h>
 #include <linux/gpio.h>
-#include <hwid.h>
 #include "cam_debug_util.h"
 #include "cam_res_mgr_api.h"
 #include "cam_res_mgr_private.h"
@@ -381,7 +380,7 @@ static int cam_res_mgr_shared_pinctrl_select_state(
 		cam_res->pctrl_res[idx].pstatus = PINCTRL_STATUS_SUSPEND;
 	}
 
-	return 0;
+	return rc;
 }
 
 static int cam_res_mgr_add_device(struct device *dev,
@@ -579,11 +578,9 @@ static void cam_res_mgr_gpio_free(struct device *dev, uint gpio)
 	bool                   need_free = true;
 	int                    dev_num = 0;
 	struct cam_gpio_res   *gpio_res = NULL;
-	bool                   is_shared_gpio = false;
 	bool                   is_shared_pctrl_gpio = false;
 	int                    pctrl_idx = -1;
 
-	is_shared_gpio = cam_res_mgr_gpio_is_in_shared_gpio(gpio);
 	is_shared_pctrl_gpio =
 			cam_res_mgr_gpio_is_in_shared_pctrl_gpio(gpio);
 
@@ -636,8 +633,12 @@ static void cam_res_mgr_gpio_free(struct device *dev, uint gpio)
 			pctrl_idx =
 				cam_res_mgr_util_get_idx_from_shared_pctrl_gpio(
 					gpio);
-			cam_res_mgr_shared_pinctrl_select_state(
-				pctrl_idx, false);
+			if (pctrl_idx >= 0) {
+				cam_res_mgr_shared_pinctrl_select_state(
+					pctrl_idx, false);
+			} else {
+				CAM_ERR(CAM_RES, "invalid pinctrl idx: %d", pctrl_idx);
+			}
 		}
 
 		CAM_DBG(CAM_RES, "freeing gpio: %u", gpio);
@@ -727,24 +728,6 @@ static int cam_res_mgr_shared_pinctrl_init(
 			"_suspend");
 		CAM_DBG(CAM_RES, "pctrl_suspend at index: %d name: %s",
 			i, pctrl_suspend);
-
-		if (!strcmp(product_name_get(), "nuwa") &&
-			(get_hw_version_build() != 0x9))
-		{
-			snprintf(pctrl_active, sizeof(pctrl_active),
-				"%s%s",
-				cam_res->dt.pctrl_name[i],
-				"_version_active");
-			CAM_DBG(CAM_RES, "pctrl_active at index: %d name: %s",
-				i, pctrl_active);
-			snprintf(pctrl_suspend, sizeof(pctrl_suspend),
-				"%s%s",
-				cam_res->dt.pctrl_name[i],
-				"_version_suspend");
-			CAM_DBG(CAM_RES, "pctrl_suspend at index: %d name: %s",
-				i, pctrl_suspend);
-		}
-
 		cam_res->pctrl_res[i].active =
 			pinctrl_lookup_state(cam_res->pinctrl,
 			pctrl_active);

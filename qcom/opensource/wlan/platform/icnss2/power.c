@@ -326,7 +326,7 @@ static struct icnss_vreg_cfg *get_vreg_list(u32 *vreg_list_size,
 		return icnss_wcn6450_vreg_list;
 
 	default:
-		icnss_pr_err("Unsupported device_id 0x%x\n", device_id);
+		icnss_pr_err("Unsupported device_id 0x%lx\n", device_id);
 		*vreg_list_size = 0;
 		return NULL;
 	}
@@ -436,8 +436,8 @@ int icnss_vreg_unvote(struct icnss_priv *priv)
 	return 0;
 }
 
-int icnss_get_clk_single(struct icnss_priv *priv,
-			 struct icnss_clk_info *clk_info)
+static int icnss_get_clk_single(struct icnss_priv *priv,
+				struct icnss_clk_info *clk_info)
 {
 	struct device *dev = &priv->pdev->dev;
 	struct clk *clk;

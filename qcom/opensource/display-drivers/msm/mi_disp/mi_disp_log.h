@@ -27,28 +27,18 @@
 #define DISPLOG_UTC_DEBUG(fmt, ...) \
 			disp_log_printk_utc("[debug]:"fmt, ##__VA_ARGS__)
 
-
-#define DISPLOG_TIME(fmt, ...)   \
-			disp_kernel_timer_log_printk(fmt, ##__VA_ARGS__)
-
-
-
 #if MI_DISP_LOG_ENABLE
 int mi_disp_log_init(void);
 void mi_disp_log_deinit(void);
 
 void disp_log_printk(const char *fmt, ...);
 void disp_log_printk_utc(const char *format, ...);
-void disp_kernel_timer_log_printk(const char *fmt, ...);
-
 #else  /* ! MI_DISP_LOG_ENABLE */
 static inline int mi_disp_log_init(void) { return 0; }
 static inline void mi_disp_log_deinit(void) {}
 
 static inline void disp_log_printk(const char *fmt, ...) {}
 static inline void disp_log_printk_utc(const char *fmt, ...) {}
-static inline void disp_kernel_timer_log_printk(const char *fmt, ...) {}
-
 #endif
 
 #endif /* _MI_DISP_LOG_H_ */

@@ -8,9 +8,7 @@
 #include "msm_drv.h"
 #include "sde_dsc_helper.h"
 #include "sde_kms.h"
-
 #include "mi_panel_id.h"
-
 
 #define SDE_DSC_PPS_SIZE       128
 
@@ -330,6 +328,7 @@ int sde_dsc_populate_dsc_config(struct drm_dsc_config *dsc, int scr_ver, u64 mi_
 			dsc->first_line_bpg_offset = 15;
 		else
 			dsc->first_line_bpg_offset = 12;
+
 		if (is_use_nt37705_dsc_config(mi_panel_id))
 			dsc->first_line_bpg_offset = 13;
 	} else if (dsc->dsc_version_minor == 0x2) {

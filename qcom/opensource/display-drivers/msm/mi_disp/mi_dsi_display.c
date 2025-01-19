@@ -18,11 +18,11 @@
 #include "mi_disp_feature.h"
 #include "mi_panel_id.h"
 #include "mi_disp_flatmode.h"
-#include "mi_backlight_ktz8866.h"
 
 static char oled_wp_info_str[32] = {0};
 static char sec_oled_wp_info_str[32] = {0};
 static char cell_id_info_str[32] = {0};
+static struct panel_manufaturer_info g_panel_manufaturer_info[MI_DISP_MAX];
 
 #define MAX_DEBUG_POLICY_CMDLINE_LEN 64
 static char display_debug_policy[MAX_DEBUG_POLICY_CMDLINE_LEN] = {0};
@@ -251,9 +251,9 @@ static ssize_t mi_dsi_display_set_dsi_porch_rw_real(void *display,
 			const char *type, u32 value)
 {
 	struct dsi_display *dsi_display = (struct dsi_display *)display;
-	struct dsi_mode_info *host_mode = NULL;
-	struct dsi_display_ctrl *ctrl = NULL;
-	struct dsi_ctrl *dsi_ctrl = NULL;
+	struct dsi_mode_info *host_mode;
+	struct dsi_display_ctrl *ctrl;
+	struct dsi_ctrl *dsi_ctrl;
 	int ret = 0, i = 0;
 
 	if (!display) {
@@ -270,7 +270,7 @@ static ssize_t mi_dsi_display_set_dsi_porch_rw_real(void *display,
 		break;
 	}
 
-	if (!dsi_display || !dsi_display->panel || !dsi_ctrl) {
+	if (!dsi_display || !dsi_display->panel) {
 		DISP_ERROR("Invalid display/panel ptr\n");
 		return -EINVAL;
 	}
@@ -1331,6 +1331,201 @@ void mi_dsi_display_wakeup_pending_doze_work(struct dsi_display *display)
 	}
 }
 
+ssize_t mi_dsi_display_parse_manufacturer_info(char *outbuf, u32 outbuf_len,
+		const char *inbuf,u32 offset,u32 len){
+	int i = 0;
+	ssize_t count =0;
+	if (!outbuf || !inbuf) {
+		DISP_ERROR("invalid params\n");
+		return -EINVAL;
+	}
+	memset(outbuf, 0, outbuf_len);
+	for (i = offset; i < offset + len; i++) {
+		count += snprintf(outbuf + count, outbuf_len - count, "%02X",inbuf[i]);
+		DISP_DEBUG("inbuf[%d] = 0x%02X\n", i,
+				inbuf[i]);
+	}
+	return count;
+}
+ssize_t mi_dsi_display_read_manufacturer_info(struct dsi_display *display,
+		struct panel_manufaturer_info *info)
+{
+	int rc = 0;
+	u8 rdbuf[64] = {0};
+	u32 rdlen = 0;
+	char *wp_buf;
+	char *maxbrightness_buf;
+	char *manufacturertime_buf;
+	u32 info_buf_size;
+	u32 manufacturer_info_addr;
+	struct dsi_parser_utils *utils;
+	u32 wp_offset;
+	u32 wp_len;
+	u32 maxbrightness_offset;
+	u32 maxbrightness_len;
+	u32 manufacturertime_offset;
+	u32 manufacturertime_len;
+	if (!display||!display->panel||!info) {
+		DISP_ERROR("Invalid display/panel/info ptr\n");
+		return -EINVAL;
+	}
+	utils = &display->panel->utils;
+	rc = utils->read_u32(utils->data, "mi,panel-manufacturer-info-addr", &manufacturer_info_addr);
+	if (rc) {
+		wp_offset = -1;
+		DISP_INFO("mi,panel-manufacturer-info-addr not specified\n");
+		return -EAGAIN;
+	} else {
+		DISP_INFO("mi,panel-manufacturer-info-addr 0x%x\n",manufacturer_info_addr);
+	}
+	rc = utils->read_u32(utils->data, "mi,panel-wp-info-offset", &wp_offset);
+	if (rc) {
+		wp_offset = -1;
+		DISP_INFO("mi,panel-wp-info-offset  not specified\n");
+	} else {
+		DISP_INFO("mi,panel-wp-info-offset %d\n",wp_offset);
+	}
+	rc = utils->read_u32(utils->data, "mi,panel-wp-info-len", &wp_len);
+	if (rc) {
+		wp_len = -1;
+		DISP_INFO("mi,panel-wp-info-len  not specified\n");
+	} else {
+		DISP_INFO("mi,panel-wp-info-len %d\n",wp_len);
+	}
+	if(wp_offset != -1 && wp_len != -1){
+		rdlen = (rdlen > wp_offset+wp_len) ? rdlen : wp_offset+wp_len;
+	}
+	rc = utils->read_u32(utils->data, "mi,panel-max-brightness-offset", &maxbrightness_offset);
+	if (rc) {
+		maxbrightness_offset = -1;
+		DISP_INFO("mi,panel-max-brightness-offset  not specified\n");
+	} else {
+		DISP_INFO("mi,panel-max-brightness-offset %d\n",maxbrightness_offset);
+	}
+	rc = utils->read_u32(utils->data, "mi,panel-max-brightness-len", &maxbrightness_len);
+	if (rc) {
+		maxbrightness_len = -1;
+		DISP_INFO("mi,panel-max-brightness-len  not specified\n");
+	} else {
+		DISP_INFO("mi,panel-max-brightness-len %d\n",maxbrightness_len);
+	}
+	if(maxbrightness_offset != -1 && maxbrightness_len != -1){
+		rdlen = (rdlen > maxbrightness_offset+maxbrightness_len) ? rdlen : maxbrightness_offset+maxbrightness_len;
+	}
+	rc = utils->read_u32(utils->data, "mi,panel-manufacturer-time-offset", &manufacturertime_offset);
+	if (rc) {
+		manufacturertime_offset = -1;
+		DISP_INFO("mi,panel-manufacturer-time-offset  not specified\n");
+	} else {
+		DISP_INFO("mi,panel-manufacturer-time-offset %d\n",manufacturertime_offset);
+	}
+	rc = utils->read_u32(utils->data, "mi,panel-manufacturer-time-len", &manufacturertime_len);
+	if (rc) {
+		manufacturertime_len = -1;
+		DISP_INFO("mi,panel-manufacturer-time-len  not specified\n");
+	} else {
+		DISP_INFO("mi,panel-manufacturer-time-len %d\n",manufacturertime_len);
+	}
+	if(manufacturertime_offset != -1 && manufacturertime_len != -1){
+		rdlen = (rdlen > manufacturertime_offset+manufacturertime_len) ? rdlen : manufacturertime_offset+manufacturertime_len;
+	}
+	if(rdlen == 0){
+		DISP_INFO("no manufacruer info need read  \n");
+		return -EAGAIN;
+	}
+	rc = mi_dsi_panel_read_manufacturer_info(display->panel,manufacturer_info_addr, rdbuf, rdlen);
+	if (rc < 0) {
+			DISP_ERROR("failed to read panel manufacturer info, rc = %d\n", rc);
+			return -EAGAIN;
+	} else {
+		wp_buf = info->wp_info;
+		maxbrightness_buf = info->maxbrightness;
+		manufacturertime_buf = info->manufacturer_time;
+		info_buf_size = 16;
+		//get info from read buf
+		if(wp_offset != -1 && wp_len != -1){
+			info->wp_info_len = mi_dsi_display_parse_manufacturer_info(wp_buf, info_buf_size, rdbuf, wp_offset, wp_len);
+		}else{
+			info->wp_info_len=0;
+		}
+		if(maxbrightness_offset != -1&&maxbrightness_len != -1){
+			info->max_brightness_len = mi_dsi_display_parse_manufacturer_info(maxbrightness_buf, info_buf_size,
+					rdbuf, maxbrightness_offset, maxbrightness_len);
+		}else{
+			info->max_brightness_len = 0;
+		}
+		if(manufacturertime_offset != -1&&manufacturertime_len != -1){
+			info->manufacturer_time_len = mi_dsi_display_parse_manufacturer_info(manufacturertime_buf, info_buf_size,
+					rdbuf, manufacturertime_offset, manufacturertime_len);
+		}else{
+			info->manufacturer_time_len = 0;
+		}
+		return rc;
+	}
+}
+ssize_t mi_dsi_display_manufacturer_info_init(void *display)
+{
+	struct panel_manufaturer_info *info;
+	int rc = 0;
+	struct dsi_display *dsi_display = (struct dsi_display *)display;
+	if (!dsi_display) {
+		DISP_ERROR("Invalid display ptr\n");
+		return -EINVAL;
+	}
+	info = &g_panel_manufaturer_info[mi_get_disp_id(dsi_display->display_type)];
+	if(!info->wp_info_len && !info->manufacturer_time_len && !info->manufacturer_time_len){
+		rc = mi_dsi_display_read_manufacturer_info(dsi_display, info);
+		if(rc < 0){
+			DISP_ERROR("read_manufacturer_info error \n");
+			return -EINVAL;
+		}
+	}
+	return 0;
+}
+ssize_t mi_dsi_display_read_manufacturer_struct_by_globleparam(void *display,
+			struct panel_manufaturer_info *manufaturer_info)
+{
+	struct dsi_display *dsi_display = (struct dsi_display *)display;
+	struct panel_manufaturer_info * info;
+	int rc = 0;
+	if (!dsi_display&&!manufaturer_info) {
+		DISP_ERROR("Invalid display/manufaturer_info ptr\n");
+		return -EINVAL;
+	}
+	info = &g_panel_manufaturer_info[mi_get_disp_id(dsi_display->display_type)];
+	if(!info->wp_info_len && !info->manufacturer_time_len && !info->manufacturer_time_len){
+		DISP_ERROR("read_manufacturer_info error \n");
+			return -EINVAL;
+	}
+	strcpy(manufaturer_info->wp_info,info->wp_info);
+	strcpy(manufaturer_info->maxbrightness,info->maxbrightness);
+	strcpy(manufaturer_info->manufacturer_time,info->manufacturer_time);
+	manufaturer_info->wp_info_len = info->wp_info_len;
+	manufaturer_info->max_brightness_len = info->max_brightness_len;
+	manufaturer_info->manufacturer_time_len = info->manufacturer_time_len;
+	return rc;
+}
+ssize_t mi_dsi_display_read_manufacturer_info_by_globleparam(void *display,
+			char *buf,size_t size)
+{
+	struct dsi_display *dsi_display = (struct dsi_display *)display;
+	struct panel_manufaturer_info * info;
+	ssize_t count = 0;
+	if (!dsi_display && !buf) {
+		DISP_ERROR("Invalid display/buf ptr\n");
+		return -EINVAL;
+	}
+	info = &g_panel_manufaturer_info[mi_get_disp_id(dsi_display->display_type)];
+	memset(buf,0,size);
+	count += snprintf(buf + count, size - count, "%036s: %s\n",
+				"wp_info",info->wp_info);
+	count += snprintf(buf + count, size - count, "%036s: %s\n",
+				"max_brightness",info->maxbrightness);
+	count += snprintf(buf + count, size - count, "%036s: %s\n",
+				"manufacturer_time",info->manufacturer_time);
+	return count;
+}
+
 int mi_dsi_display_cmd_read_locked(struct dsi_display *display,
 			      struct dsi_cmd_desc cmd, u8 *rx_buf, u32 rx_len)
 {
@@ -1431,9 +1626,6 @@ static void mi_display_pm_suspend_delayed_work_handler(struct kthread_work *work
 
 	dsi_panel_acquire_panel_lock(dsi_panel);
 	if (dsi_panel->panel_initialized && pmic_pwrkey_status == PMIC_PWRKEY_BARK_TRIGGER) {
-		if(mi_get_panel_id(mi_cfg->mi_panel_id) == N81A_PANEL_PA) {
-			ktz8866_backlight_update_status(0);
-		}
 		mode_flags_backup = dsi_panel->mipi_device.mode_flags;
 		dsi_panel->mipi_device.mode_flags |= MIPI_DSI_MODE_LPM;
 		rc = mipi_dsi_dcs_set_display_off(&dsi_panel->mipi_device);

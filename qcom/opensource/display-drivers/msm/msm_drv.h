@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2021-2023 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2021-2022 Qualcomm Innovation Center, Inc. All rights reserved.
  * Copyright (c) 2016-2021, The Linux Foundation. All rights reserved.
  * Copyright (C) 2013 Red Hat
  * Author: Rob Clark <robdclark@gmail.com>
@@ -186,7 +186,6 @@ enum msm_mdp_crtc_property {
 	CRTC_PROP_VM_REQ_STATE,
 	CRTC_PROP_NOISE_LAYER_V1,
 	CRTC_PROP_FRAME_DATA_BUF,
-
 	/* total # of properties */
 	CRTC_PROP_COUNT
 };
@@ -238,11 +237,9 @@ enum msm_mdp_conn_property {
 	CONNECTOR_PROP_CACHE_STATE,
 	CONNECTOR_PROP_DSC_MODE,
 	CONNECTOR_PROP_WB_USAGE_TYPE,
-
 	/* mi add crtc property */
 	CONNECTOR_PROP_MI_LAYER_INFO,
 	CONNECTOR_PROP_QSYNC_MIN_FPS_INDEX,
-
 	/* total # of properties */
 	CONNECTOR_PROP_COUNT
 };
@@ -1288,9 +1285,6 @@ int msm_framebuffer_set_cache_hint(struct drm_framebuffer *fb,
 		u32 flags, u32 rd_type, u32 wr_type);
 int msm_framebuffer_get_cache_hint(struct drm_framebuffer *fb,
 		u32 *flags, u32 *rd_type, u32 *wr_type);
-
-int msm_fb_obj_get_attrs(struct drm_gem_object *obj,
-		int *fb_ns, int *fb_sec, int *fb_sec_dir);
 
 struct drm_fb_helper *msm_fbdev_init(struct drm_device *dev);
 void msm_fbdev_free(struct drm_device *dev);

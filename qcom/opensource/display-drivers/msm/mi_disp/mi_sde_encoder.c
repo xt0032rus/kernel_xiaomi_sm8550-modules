@@ -135,4 +135,3 @@ ssize_t mi_sde_encoder_calc_hw_vsync_info(struct dsi_display *display,
 			display->panel->type);
 }
 
-

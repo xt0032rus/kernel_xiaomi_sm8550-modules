@@ -25,7 +25,6 @@
 #define M18_38_0C_0A_PRIM_PANEL_ID  0x004D313850380C00
 #define M18_38_0C_0A_SEC_PANEL_ID   0x004D313853380C00
 #define N11_42_02_0A_PANEL_ID  0x004E313100420200
-#define N81A_36_02_0A_PANEL_ID  0x4E38316150360200
 
 /* PA: Primary display, First selection screen
  * PB: Primary display, Second selection screen
@@ -41,7 +40,6 @@ enum mi_project_panel_id {
 	M18_PANEL_PA,
 	M18_PANEL_SA,
 	N11_PANEL_PA,
-	N81A_PANEL_PA,
 	PANEL_ID_MAX
 };
 
@@ -67,8 +65,6 @@ static inline enum mi_project_panel_id mi_get_panel_id(u64 mi_panel_id)
 		return M18_PANEL_SA;
 	case N11_42_02_0A_PANEL_ID:
 		return N11_PANEL_PA;
-	case N81A_36_02_0A_PANEL_ID:
-		return N81A_PANEL_PA;
 	default:
 		return PANEL_ID_INVALID;
 	}
@@ -91,8 +87,6 @@ static inline const char *mi_get_panel_id_name(u64 mi_panel_id)
 		return "M18_PANEL_SA";
 	case N11_PANEL_PA:
 		return "N11_PANEL_PA";
-	case N81A_PANEL_PA:
-		return "N81A_PANEL_PA";
 	default:
 		return "unknown";
 	}
@@ -114,12 +108,7 @@ static inline bool is_use_nvt_dsc_config(u64 mi_panel_id)
 
 static inline bool is_use_nt37705_dsc_config(u64 mi_panel_id)
 {
-	switch(mi_panel_id) {
-		case N81A_36_02_0A_PANEL_ID:
-			return true;
-		default:
-			return false;
-	}
+	return false;
 }
 
 enum mi_project_panel_id mi_get_panel_id_by_dsi_panel(struct dsi_panel *panel);

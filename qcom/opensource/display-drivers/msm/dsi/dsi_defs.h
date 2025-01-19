@@ -410,14 +410,6 @@ enum dsi_cmd_set_type {
 	DSI_CMD_SET_MI_TEMPERATURE_LUT3,
 	DSI_CMD_SET_MI_TEMPERATURE_LUTOFF,
 	DSI_CMD_SET_MI_LOCAL_HBM_OFF_TO_NORMAL_EM_CYCLE_32PULSE,
-	DSI_CMD_SET_TIMING_VIDEO_SWITCH,
-	DSI_CMD_SET_DISP_PEN_CLEAR,
-	DSI_CMD_SET_CABC_UI_ON,
-	DSI_CMD_SET_CABC_STILL_ON,
-	DSI_CMD_SET_CABC_MOVIE_ON,
-	DSI_CMD_SET_CABC_OFF,
-	DSI_CMD_SET_DISABLE_INSERT_BLACK,
-	DSI_CMD_SET_INSERT_BLACK,
 	/* xiaomi add end */
 	DSI_CMD_SET_MAX
 };
@@ -774,6 +766,7 @@ struct dsi_host_config {
 	struct dsi_lane_map lane_map;
 };
 
+
 struct dsi_cmd_update_info {
 	enum dsi_cmd_set_type type;
 	u32 mipi_address;
@@ -862,9 +855,6 @@ struct dsi_display_mode_priv_info {
 	int gamma_offset_peak4000_120hz[75]; /* N11 use for 4000nit 120hz offset*/
 	int gamma_offset_peak3600_60hz[75];  /* N11 use for 3600nit 60hz  offset*/
 	int gamma_offset_peak3600_120hz[75]; /* N11 use for 3600nit 120hz offset*/
-
-	u32 *mi_per_timing_fps;
-	u32 mi_per_timing_fps_len;
 };
 
 /**

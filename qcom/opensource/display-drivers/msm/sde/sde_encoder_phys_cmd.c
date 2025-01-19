@@ -10,7 +10,6 @@
 #include "sde_core_irq.h"
 #include "sde_formats.h"
 #include "sde_trace.h"
-
 #include "mi_sde_encoder.h"
 
 #define SDE_DEBUG_CMDENC(e, fmt, ...) SDE_DEBUG("enc%d intf%d " fmt, \
@@ -262,15 +261,9 @@ static void _sde_encoder_phys_signal_frame_done(struct sde_encoder_phys *phys_en
 static void sde_encoder_phys_cmd_ctl_done_irq(void *arg, int irq_idx)
 {
 	struct sde_encoder_phys *phys_enc = arg;
-	int crtc_id = 0;
-	struct drm_crtc *crtc = NULL;
 
 	if (!phys_enc)
 		return;
-	if(phys_enc->parent)
-		crtc = phys_enc->parent->crtc;
-	if(crtc)
-		crtc_id = crtc->base.id;
 
 	SDE_ATRACE_BEGIN("ctl_done_irq");
 
@@ -329,17 +322,11 @@ static void sde_encoder_phys_cmd_te_rd_ptr_irq(void *arg, int irq_idx)
 	struct sde_encoder_phys_cmd_te_timestamp *te_timestamp;
 	unsigned long lock_flags;
 	u32 fence_ready = 0;
-	int crtc_id = 0;
-	struct drm_crtc *crtc = NULL;
 
 	sde_encoder_helper_get_pp_line_count(phys_enc->parent, info);
 
 	if (!phys_enc || !phys_enc->hw_pp || !phys_enc->hw_intf || !phys_enc->hw_ctl)
 		return;
-	if(phys_enc->parent)
-		crtc = phys_enc->parent->crtc;
-	if(crtc)
-		crtc_id = crtc->base.id;
 
 	mi_sde_encoder_save_vsync_info(phys_enc);
 
@@ -384,17 +371,11 @@ static void sde_encoder_phys_cmd_wr_ptr_irq(void *arg, int irq_idx)
 	struct sde_hw_ctl *ctl;
 	u32 event = 0, qsync_mode = 0;
 	struct sde_hw_pp_vsync_info info[MAX_CHANNELS_PER_ENC] = {{0}};
-	int crtc_id = 0;
-	struct drm_crtc *crtc = NULL;
 
 	sde_encoder_helper_get_pp_line_count(phys_enc->parent, info);
 
 	if (!phys_enc || !phys_enc->hw_ctl)
 		return;
-	if(phys_enc->parent)
-		crtc = phys_enc->parent->crtc;
-	if(crtc)
-		crtc_id = crtc->base.id;
 
 	SDE_ATRACE_BEGIN("wr_ptr_irq");
 	ctl = phys_enc->hw_ctl;
@@ -579,6 +560,8 @@ static void sde_encoder_phys_cmd_mode_set(
 static int _sde_encoder_phys_cmd_handle_framedone_timeout(
 		struct sde_encoder_phys *phys_enc)
 {
+	struct sde_connector *sde_conn = NULL;
+	struct dsi_display *display = NULL;
 	struct sde_encoder_phys_cmd *cmd_enc =
 			to_sde_encoder_phys_cmd(phys_enc);
 	bool recovery_events = sde_encoder_recovery_events_enabled(
@@ -600,6 +583,14 @@ static int _sde_encoder_phys_cmd_handle_framedone_timeout(
 
 	cmd_enc->frame_tx_timeout_report_cnt++;
 	pending_kickoff_cnt = atomic_read(&phys_enc->pending_kickoff_cnt) + 1;
+
+	sde_conn = to_sde_connector(phys_enc->connector);
+	if (sde_encoder_is_dsi_display(phys_enc->parent)) {
+		display = (struct dsi_display *)sde_conn->display;
+		if (display) {
+			SDE_ERROR("[%s] pingpong timeout!\n", display->name);
+		}
+	}
 
 	SDE_EVT32(DRMID(phys_enc->parent), phys_enc->hw_pp->idx - PINGPONG_0,
 			cmd_enc->frame_tx_timeout_report_cnt,

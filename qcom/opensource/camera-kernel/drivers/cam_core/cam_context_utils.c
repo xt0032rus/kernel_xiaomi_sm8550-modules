@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2017-2021, The Linux Foundation. All rights reserved.
- * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2023 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #include <linux/debugfs.h>
@@ -167,12 +167,11 @@ free_mem:
 int cam_context_buf_done_from_hw(struct cam_context *ctx,
 	void *done_event_data, uint32_t evt_id)
 {
-	int j;
-	int result;
+	int j, result, rc;
 	struct cam_ctx_request *req;
 	struct cam_hw_done_event_data *done =
 		(struct cam_hw_done_event_data *)done_event_data;
-	int rc;
+	struct cam_packet *packet;
 
 	if (!ctx || !done) {
 		CAM_ERR(CAM_CTXT, "Invalid input params %pK %pK", ctx, done);
@@ -228,13 +227,26 @@ int cam_context_buf_done_from_hw(struct cam_context *ctx,
 		"[%s][ctx_id %d] : req[%llu] : Signaling %d",
 		ctx->dev_name, ctx->ctx_id, req->request_id, result);
 
+	if (cam_presil_mode_enabled()) {
+		rc = cam_packet_util_get_packet_addr(&packet, req->pf_data.packet_handle,
+			req->pf_data.packet_offset);
+		if (rc) {
+			CAM_ERR(CAM_CTXT,
+				"[%s][%d] : req[%llu] failed to get packet address for handle: 0x%llx",
+				ctx->dev_name, ctx->ctx_id, req->request_id,
+				req->pf_data.packet_handle);
+			return rc;
+		}
+	}
+
 	for (j = 0; j < req->num_out_map_entries; j++) {
 		/* Get buf handles from packet and retrieve them from presil framework */
 		if (cam_presil_mode_enabled()) {
-			rc = cam_presil_retrieve_buffers_from_packet(req->pf_data.packet,
+			rc = cam_presil_retrieve_buffers_from_packet(packet,
 				ctx->img_iommu_hdl, req->out_map_entries[j].resource_handle);
 			if (rc) {
 				CAM_ERR(CAM_CTXT, "Failed to retrieve image buffers rc:%d", rc);
+				cam_packet_util_put_packet_addr(req->pf_data.packet_handle);
 				return rc;
 			}
 		}
@@ -245,6 +257,9 @@ int cam_context_buf_done_from_hw(struct cam_context *ctx,
 			done->evt_param);
 		req->out_map_entries[j].sync_id = -1;
 	}
+
+	if (cam_presil_mode_enabled())
+		cam_packet_util_put_packet_addr(req->pf_data.packet_handle);
 
 	if (cam_debug_ctx_req_list & ctx->dev_id)
 		CAM_INFO(CAM_CTXT,
@@ -461,6 +476,7 @@ int32_t cam_context_config_dev_to_hw(
 		rc = -EFAULT;
 	}
 
+	cam_mem_put_cpu_buf((int32_t) cmd->packet_handle);
 	return rc;
 }
 
@@ -510,7 +526,6 @@ int32_t cam_context_prepare_dev_to_hw(struct cam_context *ctx,
 	req->num_out_acked          = 0;
 	req->flushed                = 0;
 	atomic_set(&req->num_in_acked, 0);
-	memset(&req->pf_data, 0, sizeof(struct cam_hw_mgr_pf_request_info));
 
 	remain_len = cam_context_parse_config_cmd(ctx, cmd, &packet);
 	if (IS_ERR(packet)) {
@@ -561,6 +576,9 @@ int32_t cam_context_prepare_dev_to_hw(struct cam_context *ctx,
 	req->request_id = packet->header.request_id;
 	req->status = 1;
 	req->req_priv = cfg.priv;
+	req->pf_data.packet_handle = cmd->packet_handle;
+	req->pf_data.packet_offset = cmd->offset;
+	req->pf_data.req = req;
 
 	for (i = 0; i < req->num_out_map_entries; i++) {
 		rc = cam_sync_get_obj_ref(req->out_map_entries[i].sync_id);
@@ -1409,6 +1427,40 @@ end:
 	return rc;
 }
 
+static int cam_context_dump_data_validaion(void *src, void *dest,
+		uint32_t base_len, uint32_t actual_len, uint32_t bytes_required)
+{
+	if (base_len + bytes_required >= actual_len) {
+		CAM_ERR(CAM_CTXT, "actual len %pK base len %pK",
+			actual_len, base_len);
+		return -ENOSPC;
+	}
+	memcpy(dest, src, bytes_required);
+	return 0;
+}
+
+static int cam_context_stream_dump_validation(struct cam_context *ctx,
+	uint64_t *addr, uint32_t local_len, uint32_t buf_len)
+{
+	struct cam_context_stream_dump   stream_dump;
+
+	stream_dump.hw_mgr_ctx_id =  ctx->hw_mgr_ctx_id;
+	stream_dump.dev_id =         ctx->dev_id;
+	stream_dump.dev_hdl =        ctx->dev_hdl;
+	stream_dump.link_hdl =       ctx->link_hdl;
+	stream_dump.session_hdl =    ctx->session_hdl;
+	stream_dump.refcount    =    refcount_read(&(ctx->refcount.refcount));
+	stream_dump.last_flush_req = ctx->last_flush_req;
+	stream_dump.state =          ctx->state;
+	if (cam_context_dump_data_validaion(&stream_dump, addr,
+		local_len, buf_len,
+		sizeof(struct cam_context_stream_dump))) {
+		CAM_WARN(CAM_CTXT, "failed to copy the stream info");
+		return -ENOSPC;
+	}
+	return 0;
+}
+
 static int cam_context_user_dump(struct cam_context *ctx,
 	struct cam_hw_dump_args *dump_args)
 {
@@ -1417,9 +1469,9 @@ static int cam_context_user_dump(struct cam_context *ctx,
 	struct cam_context_dump_header  *hdr;
 	uint8_t                         *dst;
 	uint64_t                        *addr, *start;
-	uint32_t                         min_len;
 	size_t                           buf_len, remain_len;
 	uintptr_t                        cpu_addr;
+	uint32_t                         local_len;
 
 	if (!ctx || !dump_args) {
 		CAM_ERR(CAM_CORE, "Invalid parameters %pK %pK",
@@ -1450,100 +1502,138 @@ static int cam_context_user_dump(struct cam_context *ctx,
 	if (dump_args->offset >= buf_len) {
 		CAM_WARN(CAM_CTXT, "dump buffer overshoot offset %zu len %zu",
 			dump_args->offset, buf_len);
-		return -ENOSPC;
-	}
-
-	remain_len = buf_len - dump_args->offset;
-	min_len = sizeof(struct cam_context_dump_header) +
-		(CAM_CTXT_DUMP_NUM_WORDS + req->num_in_map_entries +
-		(req->num_out_map_entries * 2)) * sizeof(uint64_t);
-
-	if (remain_len < min_len) {
-		CAM_WARN(CAM_CTXT, "dump buffer exhaust remain %zu min %u",
-			remain_len, min_len);
+		cam_mem_put_cpu_buf(dump_args->buf_handle);
 		return -ENOSPC;
 	}
 
 	/* Dump context info */
+	remain_len = buf_len - dump_args->offset;
+	if (remain_len < sizeof(struct cam_context_dump_header)) {
+		CAM_WARN(CAM_CTXT,
+			"No sufficient space in dump buffer for headers, remain buf size: %d, header size: %d",
+			remain_len, sizeof(struct cam_context_dump_header));
+		cam_mem_put_cpu_buf(dump_args->buf_handle);
+		return -ENOSPC;
+	}
+
 	dst = (uint8_t *)cpu_addr + dump_args->offset;
 	hdr = (struct cam_context_dump_header *)dst;
+	local_len =
+		(dump_args->offset + sizeof(struct cam_context_dump_header));
 	scnprintf(hdr->tag, CAM_CTXT_DUMP_TAG_MAX_LEN,
 		"%s_CTX_INFO:", ctx->dev_name);
 	hdr->word_size = sizeof(uint64_t);
 	addr = (uint64_t *)(dst + sizeof(struct cam_context_dump_header));
 	start = addr;
-	*addr++ = ctx->hw_mgr_ctx_id;
-	*addr++ = ctx->dev_id;
-	*addr++ = ctx->dev_hdl;
-	*addr++ = ctx->link_hdl;
-	*addr++ = ctx->session_hdl;
-	*addr++ = refcount_read(&(ctx->refcount.refcount));
-	*addr++ = ctx->last_flush_req;
-	*addr++ = ctx->state;
+	if (cam_context_stream_dump_validation(ctx, addr, local_len, buf_len)) {
+		CAM_WARN(CAM_CTXT, "%s_CTX_INFO failed to copy the stream info ", ctx->dev_name);
+		cam_mem_put_cpu_buf(dump_args->buf_handle);
+		return -ENOSPC;
+	}
+	addr = addr + sizeof(struct cam_context_stream_dump);
 	hdr->size = hdr->word_size * (addr - start);
 	dump_args->offset += hdr->size +
 		sizeof(struct cam_context_dump_header);
 
-	/* Dump pending request IDs */
-	dst = (uint8_t *)cpu_addr + dump_args->offset;
-	hdr = (struct cam_context_dump_header *)dst;
-	scnprintf(hdr->tag, CAM_CTXT_DUMP_TAG_MAX_LEN,
-		"%s_OUT_FENCE_PENDING_REQUESTS:", ctx->dev_name);
-	hdr->word_size = sizeof(uint64_t);
-	addr = (uint64_t *)(dst + sizeof(struct cam_context_dump_header));
-	start = addr;
+	/* Dump waiting requests */
 	if (!list_empty(&ctx->wait_req_list)) {
-		list_for_each_entry_safe(req, req_temp, &ctx->pending_req_list, list) {
-			*addr++ = req->request_id;
-		}
-	}
-
-	hdr->size = hdr->word_size * (addr - start);
-	dump_args->offset += hdr->size +
-		sizeof(struct cam_context_dump_header);
-
-	/* Dump applied request IDs */
-	dst = (uint8_t *)cpu_addr + dump_args->offset;
-	hdr = (struct cam_context_dump_header *)dst;
-	scnprintf(hdr->tag, CAM_CTXT_DUMP_TAG_MAX_LEN,
-		"%s_OUT_FENCE_APPLIED_REQUESTS:", ctx->dev_name);
-	hdr->word_size = sizeof(uint64_t);
-	addr = (uint64_t *)(dst + sizeof(struct cam_context_dump_header));
-	start = addr;
-	if (!list_empty(&ctx->pending_req_list)) {
 		list_for_each_entry_safe(req, req_temp, &ctx->wait_req_list, list) {
-			*addr++ = req->request_id;
+			for (i = 0; i < req->num_out_map_entries; i++) {
+				remain_len = buf_len - dump_args->offset;
+				if (remain_len < sizeof(struct cam_context_dump_header)) {
+					CAM_WARN(CAM_CTXT,
+						"No sufficient space in dump buffer for headers, remain buf size: %d, header size: %d",
+						remain_len, sizeof(struct cam_context_dump_header));
+					cam_mem_put_cpu_buf(dump_args->buf_handle);
+					return -ENOSPC;
+				}
+
+				dst = (uint8_t *)cpu_addr + dump_args->offset;
+				hdr = (struct cam_context_dump_header *)dst;
+				local_len = dump_args->offset +
+					sizeof(struct cam_context_dump_header);
+				scnprintf(hdr->tag, CAM_CTXT_DUMP_TAG_MAX_LEN,
+					"%s_OUT_FENCE_REQUEST_APPLIED.%d.%pad.%d:",
+					ctx->dev_name,
+					req->out_map_entries[i].resource_handle,
+					&(req->out_map_entries[i].image_buf_addr),
+					req->out_map_entries[i].sync_id);
+				hdr->word_size = sizeof(uint64_t);
+				addr = (uint64_t *)(dst + sizeof(struct cam_context_dump_header));
+				start = addr;
+				if (cam_context_dump_data_validaion(&req->request_id, addr,
+					local_len, buf_len,
+					sizeof(struct cam_context_each_req_info))) {
+					CAM_WARN(CAM_CTXT, "%s_CTX_INFO waiting_req: failed to copy the request info",
+						ctx->dev_name);
+					goto cleanup;
+				}
+				addr = addr + sizeof(struct cam_context_each_req_info);
+				hdr->size = hdr->word_size * (addr - start);
+				dump_args->offset += hdr->size +
+					sizeof(struct cam_context_dump_header);
+			}
 		}
 	}
 
-	hdr->size = hdr->word_size * (addr - start);
-	dump_args->offset += hdr->size +
-		sizeof(struct cam_context_dump_header);
+	/* Dump pending requests */
+	if (!list_empty(&ctx->pending_req_list)) {
+		list_for_each_entry_safe(req, req_temp, &ctx->pending_req_list, list) {
+			for (i = 0; i < req->num_out_map_entries; i++) {
+				remain_len = buf_len - dump_args->offset;
+				if (remain_len < sizeof(struct cam_context_dump_header)) {
+					CAM_WARN(CAM_CTXT,
+						"No sufficient space in dump buffer for headers, remain buf size: %d, header size: %d",
+						remain_len, sizeof(struct cam_context_dump_header));
+					cam_mem_put_cpu_buf(dump_args->buf_handle);
+					return -ENOSPC;
+				}
 
-	/* Dump active request IDs */
-	dst = (uint8_t *)cpu_addr + dump_args->offset;
-	hdr = (struct cam_context_dump_header *)dst;
-	scnprintf(hdr->tag, CAM_CTXT_DUMP_TAG_MAX_LEN,
-		"%s_OUT_FENCE_ACTIVE_REQUESTS:", ctx->dev_name);
-	hdr->word_size = sizeof(uint64_t);
-	addr = (uint64_t *)(dst + sizeof(struct cam_context_dump_header));
-	start = addr;
-	if (!list_empty(&ctx->active_req_list)) {
-		list_for_each_entry_safe(req, req_temp, &ctx->active_req_list, list) {
-			*addr++ = req->request_id;
+				dst = (uint8_t *)cpu_addr + dump_args->offset;
+				hdr = (struct cam_context_dump_header *)dst;
+				local_len = dump_args->offset +
+					sizeof(struct cam_context_dump_header);
+				scnprintf(hdr->tag, CAM_CTXT_DUMP_TAG_MAX_LEN,
+					"%s_OUT_FENCE_REQUEST_PENDING.%d.%pad.%d:",
+					ctx->dev_name,
+					req->out_map_entries[i].resource_handle,
+					&(req->out_map_entries[i].image_buf_addr),
+					req->out_map_entries[i].sync_id);
+				hdr->word_size = sizeof(uint64_t);
+				addr = (uint64_t *)(dst + sizeof(struct cam_context_dump_header));
+				start = addr;
+				if (cam_context_dump_data_validaion(&req->request_id, addr,
+					local_len, buf_len,
+					sizeof(struct cam_context_each_req_info))) {
+					CAM_WARN(CAM_CTXT, "%s_CTX_INFO pending_req: failed to copy the request info",
+						ctx->dev_name);
+					goto cleanup;
+				}
+				addr = addr + sizeof(struct cam_context_each_req_info);
+				hdr->size = hdr->word_size * (addr - start);
+				dump_args->offset += hdr->size +
+					sizeof(struct cam_context_dump_header);
+			}
 		}
 	}
-
-	hdr->size = hdr->word_size * (addr - start);
-	dump_args->offset += hdr->size +
-		sizeof(struct cam_context_dump_header);
 
 	/* Dump active requests */
 	if (!list_empty(&ctx->active_req_list)) {
 		list_for_each_entry_safe(req, req_temp, &ctx->active_req_list, list) {
 			for (i = 0; i < req->num_out_map_entries; i++) {
+				remain_len = buf_len - dump_args->offset;
+				if (remain_len < sizeof(struct cam_context_dump_header)) {
+					CAM_WARN(CAM_CTXT,
+						"No sufficient space in dump buffer for headers, remain buf size: %d, header size: %d",
+						remain_len, sizeof(struct cam_context_dump_header));
+					cam_mem_put_cpu_buf(dump_args->buf_handle);
+					return -ENOSPC;
+				}
+
 				dst = (uint8_t *)cpu_addr + dump_args->offset;
 				hdr = (struct cam_context_dump_header *)dst;
+				local_len = dump_args->offset +
+					sizeof(struct cam_context_dump_header);
 				scnprintf(hdr->tag, CAM_CTXT_DUMP_TAG_MAX_LEN,
 					"%s_OUT_FENCE_REQUEST_ACTIVE.%d.%d.%d:",
 					ctx->dev_name,
@@ -1553,14 +1643,22 @@ static int cam_context_user_dump(struct cam_context *ctx,
 				hdr->word_size = sizeof(uint64_t);
 				addr = (uint64_t *)(dst + sizeof(struct cam_context_dump_header));
 				start = addr;
-				*addr++ = req->request_id;
+				if (cam_context_dump_data_validaion(&req->request_id, addr,
+					local_len, buf_len,
+					sizeof(struct cam_context_each_req_info))) {
+					CAM_WARN(CAM_CTXT, "%s_CTX_INFO active_req: failed to copy the request info",
+						ctx->dev_name);
+					goto cleanup;
+				}
+				addr = addr + sizeof(struct cam_context_each_req_info);
 				hdr->size = hdr->word_size * (addr - start);
 				dump_args->offset += hdr->size +
 					sizeof(struct cam_context_dump_header);
 			}
 		}
 	}
-
+cleanup:
+	cam_mem_put_cpu_buf(dump_args->buf_handle);
 	return 0;
 }
 
@@ -1641,7 +1739,7 @@ size_t cam_context_parse_config_cmd(struct cam_context *ctx, struct cam_config_d
 		CAM_ERR(CAM_CTXT, "invalid buff length: %zu or offset: %zu", len,
 			(size_t)cmd->offset);
 		rc = -EINVAL;
-		goto err;
+		goto put_cpu_buf;
 	}
 
 	*packet = (struct cam_packet *) ((uint8_t *)packet_addr + (uint32_t)cmd->offset);
@@ -1651,7 +1749,12 @@ size_t cam_context_parse_config_cmd(struct cam_context *ctx, struct cam_config_d
 		cmd->packet_handle, packet_addr, cmd->offset, len, (*packet)->header.request_id,
 		(*packet)->header.size, (*packet)->header.op_code);
 
+	cam_mem_put_cpu_buf((int32_t) cmd->packet_handle);
 	return (len - (size_t)cmd->offset);
+
+put_cpu_buf:
+	if (cmd)
+		cam_mem_put_cpu_buf((int32_t) cmd->packet_handle);
 
 err:
 	if (packet)
@@ -1669,6 +1772,7 @@ static void __cam_context_req_mini_dump(struct cam_ctx_request *req,
 	struct cam_packet                *packet = NULL;
 	unsigned long                     bytes_written = 0;
 	unsigned long                     bytes_required = 0;
+	int rc;
 
 	bytes_required = sizeof(*req_md);
 	if (start_addr + bytes_written + bytes_required > end_addr)
@@ -1709,20 +1813,25 @@ static void __cam_context_req_mini_dump(struct cam_ctx_request *req,
 		bytes_written += bytes_required;
 	}
 
-	packet = (struct cam_packet *)req->pf_data.packet;
+	rc = cam_packet_util_get_packet_addr(&packet, req->pf_data.packet_handle,
+		req->pf_data.packet_offset);
+	if (rc)
+		return;
+
 	if (packet && packet->num_io_configs) {
 		bytes_required = packet->num_io_configs * sizeof(struct cam_buf_io_cfg);
 		if (start_addr + bytes_written + bytes_required > end_addr)
-			goto end;
+			goto exit;
 
 		io_cfg = (struct cam_buf_io_cfg *)((uint32_t *)&packet->payload +
-			    packet->io_configs_offset / 4);
+			packet->io_configs_offset / 4);
 		req_md->io_cfg = (struct cam_buf_io_cfg *)(start_addr + bytes_written);
 		memcpy(req_md->io_cfg, io_cfg, bytes_required);
 		bytes_written += bytes_required;
 		req_md->num_io_cfg = packet->num_io_configs;
 	}
-
+exit:
+	cam_packet_util_put_packet_addr(req->pf_data.packet_handle);
 end:
 	*bytes_updated = bytes_written;
 }

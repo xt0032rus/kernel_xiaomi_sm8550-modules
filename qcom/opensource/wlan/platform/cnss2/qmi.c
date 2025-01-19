@@ -641,10 +641,11 @@ int cnss_wlfw_tgt_cap_send_sync(struct cnss_plat_data *plat_priv)
 	for (i = 0; i < plat_priv->on_chip_pmic_devices_count; i++) {
 		if (plat_priv->board_info.board_id ==
 		    plat_priv->on_chip_pmic_board_ids[i]) {
+			char buf[CNSS_MBOX_MSG_MAX_LEN] =
+				"{class: wlan_pdc, ss: rf, res: pdc, enable: 0}";
 			cnss_pr_dbg("Disabling WLAN PDC for board_id: %02x\n",
 				    plat_priv->board_info.board_id);
-			ret = cnss_aop_send_msg(plat_priv,
-						"{class: wlan_pdc, ss: rf, res: pdc, enable: 0}");
+			ret = cnss_aop_send_msg(plat_priv, buf);
 			if (ret < 0)
 				cnss_pr_dbg("Failed to Send AOP Msg");
 			break;
@@ -1429,9 +1430,9 @@ end:
 	return ret;
 }
 
-void cnss_get_qdss_cfg_filename(struct cnss_plat_data *plat_priv,
-				char *filename, u32 filename_len,
-				bool fallback_file)
+static void cnss_get_qdss_cfg_filename(struct cnss_plat_data *plat_priv,
+				       char *filename, u32 filename_len,
+				       bool fallback_file)
 {
 	char filename_tmp[MAX_FIRMWARE_NAME_LEN];
 	char *build_str = QDSS_FILE_BUILD_STR;
@@ -3957,7 +3958,7 @@ void cnss_unregister_coex_service(struct cnss_plat_data *plat_priv)
 }
 
 /* IMS Service */
-int ims_subscribe_for_indication_send_async(struct cnss_plat_data *plat_priv)
+static int ims_subscribe_for_indication_send_async(struct cnss_plat_data *plat_priv)
 {
 	int ret;
 	struct ims_private_service_subscribe_for_indications_req_msg_v01 *req;

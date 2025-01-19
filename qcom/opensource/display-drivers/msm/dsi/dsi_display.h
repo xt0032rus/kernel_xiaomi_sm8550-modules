@@ -849,5 +849,4 @@ int dsi_display_update_transfer_time(void *display, u32 transfer_time);
 char *mi_dsi_display_get_cmdline_panel_info(struct dsi_display *display);
 int dsi_display_cmd_rx(struct dsi_display *display, struct dsi_cmd_desc *cmd);
 int dsi_display_ctrl_get_host_init_state(struct dsi_display *dsi_display, bool *state);
-
 #endif /* _DSI_DISPLAY_H_ */

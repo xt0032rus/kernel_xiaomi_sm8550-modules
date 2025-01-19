@@ -54,6 +54,7 @@
 #include "sde_reg_dma.h"
 #include "sde_connector.h"
 #include "sde_vm.h"
+#include "mi_disp_print.h"
 #include "sde_fence.h"
 
 #include <linux/qcom_scm.h>
@@ -67,7 +68,6 @@
 #define CREATE_TRACE_POINTS
 #include "sde_trace.h"
 
-#include "mi_disp_print.h"
 #include "mi_dsi_display.h"
 
 /* defines for secure channel call */
@@ -1030,6 +1030,7 @@ static void _sde_kms_drm_check_dpms(struct drm_atomic_state *old_state,
 			}
 			else
 				old_fps = drm_mode_vrefresh(&old_crtc_state->mode);
+
 			old_mode = _sde_kms_get_blank(old_crtc_state,
 							old_conn_state);
 		} else {

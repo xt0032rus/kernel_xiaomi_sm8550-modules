@@ -1661,10 +1661,6 @@ static void dp_display_disconnect_sync(struct dp_display_private *dp)
 	cancel_work_sync(&dp->attention_work);
 	flush_workqueue(dp->wq);
 
-	if (!dp->debug->sim_mode && !dp->no_aux_switch
-	    && !dp->parser->gpio_aux_switch && dp->aux->switch_configure)
-		dp->aux->switch_configure(dp->aux, false, ORIENTATION_NONE);
-
 	/*
 	 * Delay the teardown of the mainlink for better interop experience.
 	 * It is possible that certain sinks can issue an HPD high immediately

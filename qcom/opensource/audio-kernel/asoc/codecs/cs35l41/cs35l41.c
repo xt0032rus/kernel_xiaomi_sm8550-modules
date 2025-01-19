@@ -309,7 +309,7 @@ static int cs35l41_dsp_load_ev(struct snd_soc_dapm_widget *w,
 				break;
 			default:
 				dev_err(cs35l41->dev,
-					"[TF-NOSOUND] Firmware status is invalid(%u)\n",
+					"Firmware status is invalid(%u)\n",
 					fw_status);
 				break;
 			}

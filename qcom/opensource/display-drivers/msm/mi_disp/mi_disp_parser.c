@@ -14,12 +14,12 @@
 #include "dsi_panel.h"
 #include "dsi_parser.h"
 #include "mi_panel_id.h"
+#include "mi_disp_event.h"
 #include <linux/soc/qcom/smem.h>
 
 #define DEFAULT_MAX_BRIGHTNESS_CLONE 4095
 #define SMEM_SW_DISPLAY_LHBM_TABLE 498
 #define SMEM_SW_DISPLAY_GRAY_SCALE_TABLE 499
-#define SMEM_SW_DISPLAY_LOCKDOWN_TABLE 500
 
 int mi_dsi_panel_parse_esd_gpio_config(struct dsi_panel *panel)
 {
@@ -40,23 +40,6 @@ int mi_dsi_panel_parse_esd_gpio_config(struct dsi_panel *panel)
 			gpio_direction_input(mi_cfg->esd_err_irq_gpio);
 	} else {
 		rc = -EINVAL;
-	}
-
-	if(!strcmp(panel->name,"xiaomi n81a 36 02 0a vid mode duledsi dsc panel")) {
-		mi_cfg->esd_err_irq_gpio_second = of_get_named_gpio_flags(
-			utils->data, "mi,esd-err-irq-gpio-second",
-			0, (enum of_gpio_flags *)&(mi_cfg->esd_err_irq_flags_second));
-		if (gpio_is_valid(mi_cfg->esd_err_irq_gpio_second)) {
-			mi_cfg->esd_err_irq_second = gpio_to_irq(mi_cfg->esd_err_irq_gpio_second);
-			rc = gpio_request(mi_cfg->esd_err_irq_gpio_second, "esd_err_irq_gpio_second");
-			if (rc)
-				DISP_ERROR("Failed to request esd irq gpio second %d, rc=%d\n",
-					mi_cfg->esd_err_irq_gpio_second, rc);
-			else
-				gpio_direction_input(mi_cfg->esd_err_irq_gpio_second);
-		} else {
-			rc = -EINVAL;
-		}
 	}
 
 	return rc;
@@ -164,28 +147,6 @@ static void mi_dsi_panel_parse_lhbm_config(struct dsi_panel *panel)
 	}
 }
 
-static void mi_dsi_panel_parse_lockdown_config(struct dsi_panel *panel)
-{
-	size_t item_size;
-	void *lockdown_ptr = NULL;
-	struct mi_dsi_panel_cfg *mi_cfg = &panel->mi_cfg;
-
-	int i =0;
-	DISP_INFO("lockdown kernel  debug start !! \n");
-	if (mi_get_panel_id(panel->mi_cfg.mi_panel_id) == N81A_PANEL_PA) {
-		DISP_INFO("N81A product lockdown kernel get !! \n");
-		lockdown_ptr = qcom_smem_get(QCOM_SMEM_HOST_ANY, SMEM_SW_DISPLAY_LOCKDOWN_TABLE, &item_size);
-		if (!IS_ERR(lockdown_ptr) && item_size > 0) {
-			DISP_INFO("N81A lockdown data size= %d\n",item_size);
-			memcpy(mi_cfg->lockdown_cfg.lockdown_param, lockdown_ptr, item_size);
-		}
-		for (i=0; i<8 ; i++)
-		{
-			DISP_INFO("N81A lockdown data mi_cfg->lockdown_cfg.lockdown_param[%d] = 0x%0x\n",i, mi_cfg->lockdown_cfg.lockdown_param[i]);
-		}
-	}
-}
-
 static void mi_dsi_panel_parse_flat_config(struct dsi_panel *panel)
 {
 	struct dsi_parser_utils *utils = &panel->utils;
@@ -258,14 +219,6 @@ static int mi_dsi_panel_parse_dc_config(struct dsi_panel *panel)
 	}
 
 	return rc;
-}
-
-void mi_dsi_panel_parse_multi_timing_config(struct dsi_panel *panel)
-{
-	struct dsi_parser_utils *utils = &panel->utils;
-
-	panel->mi_cfg.multi_timing_enable = utils->read_bool(utils->data, "mi,video-mode-multi-timing");
-	DISP_INFO("mi-video-mode-multi-timing: %d \n", panel->mi_cfg.multi_timing_enable);
 }
 
 static int mi_dsi_panel_parse_backlight_config(struct dsi_panel *panel)
@@ -465,21 +418,14 @@ int mi_dsi_panel_parse_config(struct dsi_panel *panel)
 	}
 	rc = dsi_panel_parse_wp_reg_read_config(panel);
 	if (rc) {
+		mi_disp_mievent_str(MI_EVENT_PANEL_WP_READ_FAILED);
 		DSI_ERR("[%s] failed to get panel wp read infos, rc=%d\n",
 			panel->name, rc);
 		rc = 0;
 	}
 
-	mi_cfg->is_tddi_flag = false;
-	mi_cfg->panel_dead_flag = false;
-	mi_cfg->tddi_doubleclick_flag = false;
-	mi_cfg->is_tddi_flag = utils->read_bool(utils->data, "mi,is-tddi-flag");
-	if (mi_cfg->is_tddi_flag)
-		pr_info("panel is tddi\n");
-
 	mi_dsi_panel_parse_round_corner_config(panel);
 	mi_dsi_panel_parse_lhbm_config(panel);
-	mi_dsi_panel_parse_lockdown_config(panel);
 	mi_dsi_panel_parse_flat_config(panel);
 	mi_dsi_panel_parse_dc_config(panel);
 	mi_dsi_panel_parse_backlight_config(panel);
@@ -489,10 +435,6 @@ int mi_dsi_panel_parse_config(struct dsi_panel *panel)
 	if (rc)
 		mi_cfg->hbm_backlight_threshold = 8192;
 	DISP_INFO("panel hbm backlight threshold %d\n", mi_cfg->hbm_backlight_threshold);
-
-	mi_cfg->count_hbm_by_backlight = utils->read_bool(utils->data, "mi,panel-count-hbm-by-backlight-flag");
-	if (mi_cfg->count_hbm_by_backlight)
-		DISP_INFO("panel count hbm by backlight\n");
 
 	mi_cfg->ignore_esd_in_aod = utils->read_bool(utils->data, "mi,panel-ignore-esd-in-aod");
 	if (mi_cfg->ignore_esd_in_aod)

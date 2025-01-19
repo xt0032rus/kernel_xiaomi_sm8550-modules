@@ -100,10 +100,6 @@ struct dc_lut_cfg {
 	u8 exit_dc_lut[DC_LUT_MAX][75];
 };
 
-struct lockdown_cfg {
-	u8 lockdown_param[8];
-};
-
 struct flat_mode_cfg {
 	bool update_done;
 	int cur_flat_state;  /*only use when flat cmd need sync with te*/
@@ -136,10 +132,6 @@ struct mi_dsi_panel_cfg {
 	/* xiaomi panel id */
 	u64 mi_panel_id;
 
-	bool is_tddi_flag;
-	bool tddi_doubleclick_flag;
-	bool panel_dead_flag;
-
 	/* xiaomi feature values */
 	int feature_val[DISP_FEATURE_MAX];
 
@@ -149,12 +141,6 @@ struct mi_dsi_panel_cfg {
 	int esd_err_irq_flags;
 	bool esd_err_enabled;
 	bool panel_build_id_read_needed;
-
-	/* indicate second esd check gpio and config irq */
-	int esd_err_irq_gpio_second;
-	int esd_err_irq_second;
-	int esd_err_irq_flags_second;
-	bool esd_err_enabled_second;
 
 	/* brightness control */
 	u32 last_bl_level;
@@ -197,7 +183,6 @@ struct mi_dsi_panel_cfg {
 	bool uefi_read_gray_scale_success;
 	bool lhbm_0size_on;
 	bool lhbm_gxzw;
-	bool aod_to_normal_pending;
 	u8 lhbm_rgb_param[28];
 	u8 whitebuf_1000_gir_on[6];
 	u8 whitebuf_1000_gir_off[6];
@@ -208,9 +193,6 @@ struct mi_dsi_panel_cfg {
 
 	/* DDIC round corner */
 	bool ddic_round_corner_enabled;
-
-	/* lockdown read */
-	struct lockdown_cfg lockdown_cfg;
 
 	/* DC */
 	bool dc_feature_enable;
@@ -231,7 +213,6 @@ struct mi_dsi_panel_cfg {
 
     /* record the last refresh_rate */
 	u32 last_refresh_rate;
-	u32 last_fps;
 
 	/* Dimming */
 	u32 panel_on_dimming_delay;
@@ -247,7 +228,6 @@ struct mi_dsi_panel_cfg {
 	bool panel_batch_number_read_done;
 
 	u32 hbm_backlight_threshold;
-	bool count_hbm_by_backlight;
 
 	/* ingore esd in aod*/
 	bool ignore_esd_in_aod;
@@ -282,8 +262,6 @@ struct mi_dsi_panel_cfg {
 
 	/*panel 3d lut temperature compensation */
 	bool dbi_3dlut_compensate_enable;
-
-	bool multi_timing_enable;
 };
 
 struct panel_batch_info
@@ -316,6 +294,8 @@ int mi_dsi_acquire_wakelock(struct dsi_panel *panel);
 int mi_dsi_release_wakelock(struct dsi_panel *panel);
 
 bool is_aod_and_panel_initialized(struct dsi_panel *panel);
+
+void mi_dsi_panel_sync_lhbm_alpha(struct dsi_panel *panel, u32 bl_lvl);
 
 bool is_backlight_set_skip(struct dsi_panel *panel, u32 bl_lvl);
 
@@ -395,6 +375,9 @@ int mi_dsi_panel_set_dc_mode(struct dsi_panel *panel, bool enable);
 
 int mi_dsi_panel_set_dc_mode_locked(struct dsi_panel *panel, bool enable);
 
+int mi_dsi_panel_set_lhbm_fod_locked(struct dsi_panel *panel,
+		struct disp_feature_ctl *ctl);
+
 int mi_dsi_panel_read_and_update_flat_param_locked(struct dsi_panel *panel);
 
 int mi_dsi_panel_read_and_update_flat_param(struct dsi_panel *panel);
@@ -406,6 +389,13 @@ int mi_dsi_panel_read_and_update_dc_param(struct dsi_panel *panel);
 int mi_dsi_panel_read_and_update_doze_param_locked(struct dsi_panel *panel);
 
 int mi_dsi_panel_read_and_update_doze_param(struct dsi_panel *panel);
+
+int mi_dsi_panel_read_manufacturer_info_locked(struct dsi_panel *panel,
+		u32 manufacturer_info_addr, char *rdbuf, int rdlen);
+
+int mi_dsi_panel_read_manufacturer_info(struct dsi_panel *panel,
+		u32 manufacturer_info_addr, char *rdbuf, int rdlen);
+
 
 int mi_dsi_panel_read_lhbm_white_param_locked(struct dsi_panel *panel);
 
@@ -472,6 +462,4 @@ int mi_dsi_panel_cal_update_peak_hdr_gamma_N11(struct dsi_panel *panel);
 int mi_dsi_panel_cal_send_peak_hdr_gamma(struct dsi_panel *panel);
 int mi_dsi_panel_set_nolp_locked(struct dsi_panel *panel);
 bool mi_dsi_panel_new_aod(struct dsi_panel *panel);
-int mi_dsi_panel_parse_timing_fps_params(struct dsi_display_mode *mode, struct dsi_parser_utils *utils);
-
 #endif /* _MI_DSI_PANEL_H_ */

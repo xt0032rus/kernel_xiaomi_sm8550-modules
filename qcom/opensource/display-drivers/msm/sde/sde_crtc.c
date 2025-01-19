@@ -6931,7 +6931,7 @@ void sde_crtc_set_qos_dirty(struct drm_crtc *crtc)
 		plane_mask |= drm_plane_mask(plane);
 	}
 	SDE_EVT32(DRMID(crtc), plane_mask);
-
+	
 	sde_crtc_update_line_time(crtc);
 }
 

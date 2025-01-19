@@ -50,6 +50,7 @@ struct cam_presil_dmabuf_params {
  * @vaddr:          IOVA of buffer
  * @kmdvaddr:       Kernel virtual address
  * @active:         state of the buffer
+ * @release_deferred: Buffer is deferred for release.
  * @is_imported:    Flag indicating if buffer is imported from an FD in user space
  * @is_internal:    Flag indicating kernel allocated buffer
  * @timestamp:      Timestamp at which this entry in tbl was made
@@ -75,9 +76,13 @@ struct cam_mem_buf_queue {
 	dma_addr_t vaddr;
 	uintptr_t kmdvaddr;
 	bool active;
+	bool release_deferred;
 	bool is_imported;
 	bool is_internal;
 	struct timespec64 timestamp;
+	struct kref krefcount;
+	enum cam_smmu_mapping_client smmu_mapping_client;
+	char buf_name[CAM_DMA_BUF_NAME_LEN];
 
 #ifdef CONFIG_CAM_PRESIL
 	struct cam_presil_dmabuf_params presil_params;

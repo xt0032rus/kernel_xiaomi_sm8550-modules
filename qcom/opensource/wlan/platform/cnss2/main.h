@@ -74,6 +74,7 @@
 
 #define POWER_ON_RETRY_DELAY_MS         500
 #define WLFW_MAX_HANG_EVENT_DATA_SIZE   384
+#define CNSS_MBOX_MSG_MAX_LEN           64
 
 #define CNSS_EVENT_SYNC   BIT(0)
 #define CNSS_EVENT_UNINTERRUPTIBLE BIT(1)
@@ -116,6 +117,11 @@ struct cnss_vreg_info {
 
 enum cnss_vreg_type {
 	CNSS_VREG_PRIM,
+};
+
+enum cnss_pci_switch_type {
+	PCIE_DIRECT_ATTACH = 0,
+	PCIE_SWITCH_NTN3,
 };
 
 struct cnss_clk_cfg {
@@ -507,6 +513,7 @@ struct cnss_thermal_cdev {
 
 struct cnss_plat_data {
 	struct platform_device *plat_dev;
+	enum cnss_driver_mode driver_mode;
 	void *bus_priv;
 	enum cnss_dev_bus_type bus_type;
 	struct list_head vreg_list;
@@ -648,6 +655,8 @@ struct cnss_plat_data {
 	bool no_bwscale;
 	bool sleep_clk;
 	struct wlchip_serial_id_v01 serial_id;
+	bool ipa_shared_cb_enable;
+	u32 pcie_switch_type;
 };
 
 #if IS_ENABLED(CONFIG_ARCH_QCOM)
@@ -739,6 +748,7 @@ void cnss_aop_interface_deinit(struct cnss_plat_data *plat_priv);
 int cnss_aop_pdc_reconfig(struct cnss_plat_data *plat_priv);
 int cnss_aop_send_msg(struct cnss_plat_data *plat_priv, char *msg);
 void cnss_power_misc_params_init(struct cnss_plat_data *plat_priv);
+void cnss_pci_of_switch_type_init(struct cnss_plat_data *plat_priv);
 int cnss_aop_ol_cpr_cfg_setup(struct cnss_plat_data *plat_priv,
 			      struct wlfw_pmu_cfg_v01 *fw_pmu_cfg);
 int cnss_request_firmware_direct(struct cnss_plat_data *plat_priv,
@@ -758,4 +768,6 @@ size_t cnss_get_platform_name(struct cnss_plat_data *plat_priv,
 			      char *buf, const size_t buf_len);
 int cnss_iommu_map(struct iommu_domain *domain, unsigned long iova,
 		   phys_addr_t paddr, size_t size, int prot);
+int cnss_select_pinctrl_enable(struct cnss_plat_data *plat_priv);
+int cnss_select_pinctrl_state(struct cnss_plat_data *plat_priv, bool state);
 #endif /* _CNSS_MAIN_H */

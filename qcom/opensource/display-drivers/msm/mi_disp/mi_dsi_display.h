@@ -16,6 +16,15 @@ struct dsi_read_info {
 	u8 rx_buf[256];
 };
 
+struct panel_manufaturer_info{
+	char wp_info[16];
+	char maxbrightness[16];
+	char manufacturer_time[16];
+	u32 wp_info_len;
+	u32 max_brightness_len;
+	u32 manufacturer_time_len;
+};
+
 int mi_dsi_display_cmd_read_locked(struct dsi_display *display,
 			      struct dsi_cmd_desc cmd, u8 *rx_buf, u32 rx_len);
 
@@ -56,6 +65,21 @@ ssize_t mi_dsi_display_read_panel_info(void *display,
 
 ssize_t mi_dsi_display_read_wp_info(void *display,
 			char *buf, size_t size);
+
+ssize_t mi_dsi_display_parse_manufacturer_info(char *outbuf, u32 outbuf_len,
+			const char *inbuf,u32 offset,u32 len);
+
+ssize_t mi_dsi_display_read_manufacturer_info(struct dsi_display *display,
+			struct panel_manufaturer_info *info);
+
+ssize_t mi_dsi_display_manufacturer_info_init(void *display);
+
+ssize_t mi_dsi_display_read_manufacturer_info_by_globleparam(void *display,
+			char *buf,size_t size);
+
+ssize_t mi_dsi_display_read_manufacturer_struct_by_globleparam(void *display,
+			struct panel_manufaturer_info *manufaturer_info);
+
 
 ssize_t mi_dsi_display_read_gray_scale_info(void *display,
 			char *buf, size_t size);
@@ -124,6 +148,4 @@ bool mi_dsi_display_ramdump_support(void);
 int mi_display_pm_suspend_delayed_work(struct dsi_display *display);
 
 int mi_display_powerkey_callback(int status);
-
-
 #endif /*_MI_DSI_DISPLAY_H_*/

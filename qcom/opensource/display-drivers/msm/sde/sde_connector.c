@@ -29,6 +29,7 @@
 #include "mi_dsi_display.h"
 #include "mi_cooling_device.h"
 #include "mi_disp_lhbm.h"
+#include "mi_disp_event.h"
 
 #define BL_NODE_NAME_SIZE 32
 #define HDR10_PLUS_VSIF_TYPE_CODE      0x81
@@ -948,6 +949,7 @@ void sde_connector_set_qsync_params(struct drm_connector *connector)
 			c_conn->qsync_min_fps_index = qsync_propval;
 		}
 	}
+
 }
 
 void sde_connector_complete_qsync_commit(struct drm_connector *conn,
@@ -1228,9 +1230,12 @@ void sde_connector_helper_bridge_enable(struct drm_connector *connector)
 	 */
 	if ((display->panel->bl_config.bl_update ==
 		BL_UPDATE_DELAY_UNTIL_FIRST_FRAME) &&
-		crtc && crtc->state->active_changed)
-		sde_encoder_wait_for_event(c_conn->encoder,
-				MSM_ENC_TX_COMPLETE);
+		crtc && crtc->state->active_changed) {
+		if (!c_conn->allow_bl_update)
+			sde_encoder_wait_for_event(c_conn->encoder,
+					MSM_ENC_TX_COMPLETE);
+	}
+
 	c_conn->allow_bl_update = true;
 
 	if (!sde_in_trusted_vm(sde_kms) && c_conn->bl_device && !display->poms_pending) {
@@ -2840,7 +2845,6 @@ void _sde_connector_report_panel_dead(struct sde_connector *conn,
 	bool skip_pre_kickoff)
 {
 	struct drm_event event;
-	struct dsi_display *display = (struct dsi_display *)(conn->display);
 
 	if (!conn)
 		return;
@@ -2855,7 +2859,6 @@ void _sde_connector_report_panel_dead(struct sde_connector *conn,
 
 	SDE_EVT32(SDE_EVTLOG_ERROR);
 	conn->panel_dead = true;
-	display->panel->mi_cfg.panel_dead_flag = true;
 	sde_encoder_display_failure_notification(conn->encoder,
 		skip_pre_kickoff);
 
@@ -2927,6 +2930,10 @@ int sde_connector_esd_status(struct drm_connector *conn)
 	if (ret <= 0) {
 		/* cancel if any pending esd work */
 		sde_connector_schedule_status_work(conn, false);
+		if (!strcmp(display->display_type, "primary"))
+			mi_disp_mievent_int(MI_DISP_PRIMARY,MI_EVENT_PRI_PLATFORM_ESD);
+		else
+			mi_disp_mievent_int(MI_DISP_SECONDARY,MI_EVENT_SEC_PLATFORM_ESD);
 		_sde_connector_report_panel_dead(sde_conn, true);
 		ret = -ETIMEDOUT;
 	} else {
@@ -2980,6 +2987,10 @@ static void sde_connector_check_status_work(struct work_struct *work)
 	}
 
 	display = (struct dsi_display *) conn->display;
+	if (!strcmp(display->display_type, "primary"))
+		mi_disp_mievent_int(MI_DISP_PRIMARY,MI_EVENT_PRI_PANEL_REG_ESD);
+	else
+		mi_disp_mievent_int(MI_DISP_SECONDARY,MI_EVENT_SEC_PANEL_REG_ESD);
 	_sde_connector_report_panel_dead(conn, false);
 }
 

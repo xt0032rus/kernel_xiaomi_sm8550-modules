@@ -241,8 +241,8 @@ static void dsi_bridge_pre_enable(struct drm_bridge *bridge)
 	if (rc)
 		DSI_ERR("Continuous splash pipeline cleanup failed, rc=%d\n",
 									rc);
-
 	sde_connector_update_panel_dead(display->drm_conn, !display->panel->panel_initialized);
+
 }
 
 static void dsi_bridge_enable(struct drm_bridge *bridge)
@@ -983,9 +983,6 @@ void dsi_conn_set_submode_blob_info(struct drm_connector *conn,
 			dsi_mode->priv_info->topology);
 		if (topo_name)
 			sde_kms_info_add_keystr(info, "topology", topo_name);
-
-		sde_kms_info_add_keyint(info, "pixel_clk_khz",
-				dsi_mode->pixel_clk_khz);
 
 		if (!dsi_mode->priv_info->bit_clk_list.count)
 			continue;

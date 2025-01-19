@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2017-2021, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2023-2024, Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #include <linux/string.h>
@@ -138,8 +139,8 @@ int cam_common_modify_timer(struct timer_list *timer, int32_t timeout_val)
 	return 0;
 }
 
-void cam_common_util_thread_switch_delay_detect(
-	const char *token, ktime_t scheduled_time, uint32_t threshold)
+void cam_common_util_thread_switch_delay_detect(char *wq_name, const char *state,
+	void *cb, ktime_t scheduled_time, uint32_t threshold)
 {
 	uint64_t                         diff;
 	ktime_t                          cur_time;
@@ -153,8 +154,9 @@ void cam_common_util_thread_switch_delay_detect(
 		scheduled_ts  = ktime_to_timespec64(scheduled_time);
 		cur_ts = ktime_to_timespec64(cur_time);
 		CAM_WARN_RATE_LIMIT_CUSTOM(CAM_UTIL, 1, 1,
-			"%s delay detected %ld:%06ld cur %ld:%06ld diff %ld: threshold %d",
-			token, scheduled_ts.tv_sec,
+			"%s cb: %ps delay in %s detected %ld:%06ld cur %ld:%06ld\n"
+			"diff %ld: threshold %d\n",
+			wq_name, cb, state, scheduled_ts.tv_sec,
 			scheduled_ts.tv_nsec/NSEC_PER_USEC,
 			cur_ts.tv_sec, cur_ts.tv_nsec/NSEC_PER_USEC,
 			diff, threshold);
@@ -415,7 +417,9 @@ static int cam_err_inject_set(const char *kmessage,
 		switch (param_counter) {
 		case HW_NAME:
 			if (strcmp(token_start, CAM_COMMON_IFE_NODE) == 0)
-				err_params->hw_id = CAM_COMMON_ERR_INJECT_HW_ISP;
+				err_params->hw_id = CAM_COMMON_ERR_INJECT_HW_IFE;
+			if (strcmp(token_start, CAM_COMMON_TFE_NODE) == 0)
+				err_params->hw_id = CAM_COMMON_ERR_INJECT_HW_TFE;
 			else if (strcmp(token_start, CAM_COMMON_ICP_NODE) == 0)
 				err_params->hw_id = CAM_COMMON_ERR_INJECT_HW_ICP;
 			else if (strcmp(token_start, CAM_COMMON_JPEG_NODE) == 0)
@@ -499,8 +503,11 @@ static int cam_err_inject_get(char *buffer,
 	else if (!list_empty(&g_err_inject_info.active_err_ctx_list)) {
 		list_for_each_entry(err_param, &g_err_inject_info.active_err_ctx_list, list) {
 			switch (err_param->hw_id) {
-			case CAM_COMMON_ERR_INJECT_HW_ISP:
+			case CAM_COMMON_ERR_INJECT_HW_IFE:
 				strscpy(hw_name, CAM_COMMON_IFE_NODE, 10);
+				break;
+			case CAM_COMMON_ERR_INJECT_HW_TFE:
+				strscpy(hw_name, CAM_COMMON_TFE_NODE, 10);
 				break;
 			case CAM_COMMON_ERR_INJECT_HW_ICP:
 				strscpy(hw_name, CAM_COMMON_ICP_NODE, 10);
@@ -537,3 +544,36 @@ static const struct kernel_param_ops cam_error_inject_ops = {
 };
 
 module_param_cb(cam_error_inject, &cam_error_inject_ops, NULL, 0644);
+
+int cam_common_mem_kdup(void **dst,
+	void *src, size_t size)
+{
+	gfp_t flag = GFP_KERNEL;
+
+	if (!src || !dst || !size) {
+		CAM_ERR(CAM_UTIL, "Invalid params src: %pK dst: %pK size: %u",
+			src, dst, size);
+		return -EINVAL;
+	}
+
+	if (!in_task())
+		flag = GFP_ATOMIC;
+
+	*dst = kvzalloc(size, flag);
+	if (!*dst) {
+		CAM_ERR(CAM_UTIL, "Failed to allocate memory with size: %u", size);
+		return -ENOMEM;
+	}
+
+	memcpy(*dst, src, size);
+	CAM_DBG(CAM_UTIL, "Allocate and copy memory with size: %u", size);
+
+	return 0;
+}
+EXPORT_SYMBOL(cam_common_mem_kdup);
+
+void cam_common_mem_free(void *memory)
+{
+	kvfree(memory);
+}
+EXPORT_SYMBOL(cam_common_mem_free);

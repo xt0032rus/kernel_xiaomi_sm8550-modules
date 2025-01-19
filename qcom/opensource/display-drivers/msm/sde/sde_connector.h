@@ -15,7 +15,6 @@
 #include "msm_prop.h"
 #include "sde_kms.h"
 #include "sde_fence.h"
-
 #include "mi_sde_connector.h"
 
 #define SDE_CONNECTOR_NAME_SIZE	16
@@ -638,6 +637,7 @@ struct sde_connector {
 	int rx_len;
 
 	struct edid *cached_edid;
+
 	bool misr_event_notify_enabled;
 	struct sde_misr_sign previous_misr_sign;
 

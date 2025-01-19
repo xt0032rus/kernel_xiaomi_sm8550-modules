@@ -59,6 +59,9 @@ enum disp_feature_id {
 	DISP_FEATURE_BIST_MODE_COLOR = 30,
 	DISP_FEATURE_ROUND_MODE = 31,
 	DISP_FEATURE_GAMUT = 32,
+	DISP_FEATURE_POWERSTATUS = 33,
+	DISP_FEATURE_SYSTEM_BUILD_VERSION = 34,
+	DISP_FEATURE_FRAME_DROP_COUNT = 35,
 	DISP_FEATURE_MAX,
 };
 
@@ -216,6 +219,17 @@ struct disp_wp_info {
 	char *info;
 };
 
+/* IOCTL: MI_DISP_IOCTL_GET_MANUFACTURER_INFO parameter */
+struct disp_manufacturer_info_req {
+	struct disp_base base;
+	char *wp_info;
+	char *maxbrightness;
+	char *manufacturer_time;
+	__u32 wp_info_len;
+	__u32 max_brightness_len;
+	__u32 manufacturer_time_len;
+};
+
 /* IOCTL: MI_DISP_IOCTL_GET_FPS parameter */
 struct disp_fps_info {
 	struct disp_base base;
@@ -291,27 +305,6 @@ struct disp_dsi_cmd_req {
 	__u32 tx_len;
 	__u64 tx_ptr;
 	__u8  rx_state;
-	__u32 rx_len;
-	__u64 rx_ptr;
-};
-
-/* supported count info ids */
-enum disp_count_info_type {
-	DISP_COUNT_INFO_POWERSTATUS = 0,
-	DISP_COUNT_INFO_SYSTEM_BUILD_VERSION = 1,
-	DISP_COUNT_INFO_FRAME_DROP_COUNT = 2,
-	DISP_COUNT_INFO_SWITCH_KERNEL_FUNCTION_TIMER = 3,
-	DISP_COUNT_INFO_TPIDLE_COUNT = 4,
-	DISP_COUNT_INFO_MAX,
-};
-
-/* IOCTL: MI_DISP_IOCTL_SET_COUNT_INFO parameter */
-struct disp_count_info_req {
-	struct disp_base base;
-	__u32 count_info_type;
-	__s32 count_info_val;
-	__u32 tx_len;
-	__u64 tx_ptr;
 	__u32 rx_len;
 	__u64 rx_ptr;
 };
@@ -549,6 +542,12 @@ static inline const char *get_disp_feature_id_name(__u32 feature_id)
 		return "round_mode";
 	case DISP_FEATURE_GAMUT:
 		return "gamut";
+	case DISP_FEATURE_POWERSTATUS:
+		return "power_status";
+	case DISP_FEATURE_SYSTEM_BUILD_VERSION:
+		return "system_build_version";
+	case DISP_FEATURE_FRAME_DROP_COUNT:
+		return "frame_drop_count";
 	default:
 		return "Unknown";
 	}
@@ -572,31 +571,6 @@ static inline const char *get_lhbm_value_name(__u32 lhbm_value)
 	}
 }
 
-static inline int is_support_disp_count_info_type(__u32 count_info_type)
-{
-	if (count_info_type < DISP_COUNT_INFO_MAX)
-		return 1;
-	else
-		return 0;
-}
-
-static inline const char *get_disp_count_info_type_name(__u32 count_info_type)
-{
-	switch (count_info_type) {
-	case DISP_COUNT_INFO_POWERSTATUS:
-		return "power_status";
-	case DISP_COUNT_INFO_SYSTEM_BUILD_VERSION:
-		return "system_build_version";
-	case DISP_COUNT_INFO_FRAME_DROP_COUNT:
-		return "frame_drop_count";
-	case DISP_COUNT_INFO_SWITCH_KERNEL_FUNCTION_TIMER:
-		return "swith_function_timer";
-	case DISP_COUNT_INFO_TPIDLE_COUNT:
-		return "tpidle_count";
-	default:
-		return "Unknown count info type";
-	}
-}
 #else
 static inline int isSupportDispId(__u32 disp_id)
 {
@@ -830,6 +804,12 @@ static inline const char *getDispFeatureIdName(__u32 feature_id)
 		return "round_mode";
 	case DISP_FEATURE_GAMUT:
 		return "gamut";
+	case DISP_FEATURE_POWERSTATUS:
+		return "power_status";
+	case DISP_FEATURE_SYSTEM_BUILD_VERSION:
+		return "system_build_version";
+	case DISP_FEATURE_FRAME_DROP_COUNT:
+		return "frame_drop_count";
 	default:
 		return "Unknown";
 	}
@@ -853,31 +833,6 @@ static inline const char *getLhbmValueName(__u32 lhbm_value)
 	}
 }
 
-static inline int isSupportDispCountInfoType(__u32 count_info_type)
-{
-	if (count_info_type < DISP_COUNT_INFO_MAX)
-		return 1;
-	else
-		return 0;
-}
-
-static inline const char *getDispCountInfoTypeName(__u32 count_info_type)
-{
-	switch (count_info_type) {
-	case DISP_COUNT_INFO_POWERSTATUS:
-		return "power_status";
-	case DISP_COUNT_INFO_SYSTEM_BUILD_VERSION:
-		return "system_build_version";
-	case DISP_COUNT_INFO_FRAME_DROP_COUNT:
-		return "frame_drop_count";
-	case DISP_COUNT_INFO_SWITCH_KERNEL_FUNCTION_TIMER:
-		return "swithc_function_timer:";
-	case DISP_COUNT_INFO_TPIDLE_COUNT:
-		return "tpidle_count";
-	default:
-		return "Unknown count info type";
-	}
-}
 #endif
 
 
@@ -902,7 +857,7 @@ static inline const char *getDispCountInfoTypeName(__u32 count_info_type)
 #define MI_DISP_IOCTL_READ_DSI_CMD            _IOWR('D', 0x0A, struct disp_dsi_cmd_req)
 #define MI_DISP_IOCTL_GET_BRIGHTNESS           _IOR('D', 0x0B, struct disp_brightness_req)
 #define MI_DISP_IOCTL_SET_BRIGHTNESS           _IOW('D', 0x0C, struct disp_brightness_req)
-#define MI_DISP_IOCTL_SET_COUNT_INFO          _IOWR('D', 0x0D, struct disp_count_info_req)
+#define MI_DISP_IOCTL_GET_MANUFACTURER_INFO   _IOWR('D', 0x0D, struct disp_manufacturer_info_req)
 #define MI_DISP_IOCTL_SET_LOCAL_HBM            _IOW('D', 0x0E, struct disp_local_hbm_req)
 #define MI_DISP_IOCTL_GET_FEATURE             _IOWR('D', 0x0F, struct disp_feature_req)
 

@@ -20,6 +20,7 @@
 #include "mi_dsi_display.h"
 #include "mi_sde_connector.h"
 #include "mi_disp_lhbm.h"
+#include "mi_disp_event.h"
 #include "mi_panel_id.h"
 
 static irqreturn_t mi_esd_err_irq_handle(int irq, void *data)
@@ -83,6 +84,10 @@ static irqreturn_t mi_esd_err_irq_handle(int irq, void *data)
 
 		if (power_mode == SDE_MODE_DPMS_ON ||
 			power_mode == SDE_MODE_DPMS_LP1) {
+			if (!strcmp(display->display_type, "primary"))
+				mi_disp_mievent_int(MI_DISP_PRIMARY,MI_EVENT_PRI_PANEL_IRQ_ESD);
+			else
+				mi_disp_mievent_int(MI_DISP_SECONDARY,MI_EVENT_SEC_PANEL_IRQ_ESD);
 			_sde_connector_report_panel_dead(c_conn, false);
 		} else {
 			c_conn->panel_dead = true;
@@ -126,23 +131,6 @@ int mi_sde_connector_register_esd_irq(struct sde_connector *c_conn)
 				DISP_INFO("%s display register esd irq success\n",
 					display->display_type);
 				disable_irq(display->panel->mi_cfg.esd_err_irq);
-			}
-		}
-
-		if (mi_get_panel_id(display->panel->mi_cfg.mi_panel_id) == N81A_PANEL_PA) {
-			if (display->panel->mi_cfg.esd_err_irq_gpio_second > 0) {
-				rc = request_threaded_irq(display->panel->mi_cfg.esd_err_irq_second,
-					NULL, mi_esd_err_irq_handle,
-					display->panel->mi_cfg.esd_err_irq_flags_second,
-					"esd_err_irq_second", c_conn);
-				if (rc) {
-					DISP_ERROR("%s display register esd irq second failed\n",
-						display->display_type);
-				} else {
-					DISP_INFO("%s display register esd irq second success\n",
-						display->display_type);
-					disable_irq(display->panel->mi_cfg.esd_err_irq_second);
-				}
 			}
 		}
 	}
@@ -205,6 +193,11 @@ int mi_sde_connector_debugfs_esd_sw_trigger(void *display)
 		}
 	}
 
+	if (!strcmp(dsi_display->display_type, "primary"))
+		mi_disp_mievent_int(MI_DISP_PRIMARY,MI_EVENT_PRI_PANEL_IRQ_ESD);
+	else
+		mi_disp_mievent_int(MI_DISP_SECONDARY,MI_EVENT_SEC_PANEL_IRQ_ESD);
+
 	event.type = DRM_EVENT_PANEL_DEAD;
 	event.length = sizeof(bool);
 	msm_mode_object_event_notify(&c_conn->base.base,
@@ -215,7 +208,6 @@ int mi_sde_connector_debugfs_esd_sw_trigger(void *display)
 
 int mi_sde_connector_check_layer_flags(struct drm_connector *connector)
 {
-        int ret = 0;
 	struct sde_connector *c_conn;
 	struct dsi_display *display = NULL;
 	u32 value;
@@ -241,15 +233,9 @@ int mi_sde_connector_check_layer_flags(struct drm_connector *connector)
 
 		if (flags.gxzw_anim_changed) {
 			DISP_INFO("layer gxzw_anim = %d\n", flags.gxzw_anim_present);
-			if (display && mi_disp_lhbm_fod_enabled(display->panel)) {
-				ret = mi_disp_lhbm_aod_to_normal_optimize(display, flags.gxzw_anim_present);
-				if (ret == -EAGAIN) {
-					display->panel->mi_cfg.aod_to_normal_pending = true;
-				} else {
-					display->panel->mi_cfg.aod_to_normal_pending = false;
-				}
+			if (mi_disp_lhbm_fod_enabled(display->panel)) {
+				mi_disp_lhbm_aod_to_normal_optimize(display, flags.gxzw_anim_present);
 			}
-                        display->panel->mi_cfg.lhbm_gxzw= flags.gxzw_anim_present;
 			mi_disp_update_0size_lhbm_layer(display, flags.gxzw_anim_present);
 		}
 		if (flags.aod_changed) {

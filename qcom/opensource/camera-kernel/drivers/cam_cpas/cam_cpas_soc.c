@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2017-2021, The Linux Foundation. All rights reserved.
- * Copyright (c) 2022, Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2023, Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #include <linux/device.h>
@@ -310,6 +310,11 @@ static int cam_cpas_parse_mnoc_node(struct cam_cpas *cpas_core,
 			return -EPERM;
 		}
 
+		if (*mnoc_idx >= CAM_CPAS_MAX_AXI_PORTS) {
+			CAM_ERR(CAM_CPAS, "Invalid mnoc index: %d", *mnoc_idx);
+			return -EINVAL;
+		}
+
 		cpas_core->axi_port[*mnoc_idx].axi_port_node = mnoc_node;
 		rc =  of_property_read_string(curr_node_ptr->tree_dev_node, "qcom,axi-port-name",
 			&cpas_core->axi_port[*mnoc_idx].bus_client.common_data.name);
@@ -606,8 +611,6 @@ static int cam_cpas_parse_node_tree(struct cam_cpas *cpas_core,
 	return 0;
 }
 
-
-
 int cam_cpas_get_hw_features(struct platform_device *pdev,
 	struct cam_cpas_private_soc *soc_private)
 {
@@ -624,11 +627,9 @@ int cam_cpas_get_hw_features(struct platform_device *pdev,
 
 	CAM_DBG(CAM_CPAS, "fuse info elements count %d", count);
 
-	if (count <= 0) {
-		CAM_INFO(CAM_CPAS, "No or invalid fuse entries count: %d",
-			count);
+	if (count <= 0)
 		goto end;
-	} else if (count%5 != 0) {
+	else if (count%5 != 0) {
 		CAM_INFO(CAM_CPAS, "fuse entries should be multiple of 5 %d",
 			count);
 		goto end;
@@ -949,6 +950,7 @@ int cam_cpas_get_custom_dt_info(struct cam_hw_info *cpas_hw,
 	int count = 0, i = 0, rc = 0, num_bw_values = 0, num_levels = 0;
 	uint32_t cam_drv_en_mask_val = 0;
 	struct cam_cpas *cpas_core = (struct cam_cpas *) cpas_hw->core_info;
+	uint32_t ahb_bus_client_ab = 0, ahb_bus_client_ib = 0;
 
 	if (!soc_private || !pdev) {
 		CAM_ERR(CAM_CPAS, "invalid input arg %pK %pK",
@@ -1085,26 +1087,26 @@ int cam_cpas_get_custom_dt_info(struct cam_hw_info *cpas_hw,
 			rc = of_property_read_u32_index(of_node,
 				"cam-ahb-bw-KBps",
 				(i * 2),
-				(uint32_t *) &cpas_core->ahb_bus_client
-				.common_data.bw_pair[i].ab);
+				&ahb_bus_client_ab);
 			if (rc) {
 				CAM_ERR(CAM_UTIL,
 					"Error reading ab bw value, rc=%d",
 					rc);
 				return rc;
 			}
+			cpas_core->ahb_bus_client.common_data.bw_pair[i].ab = ahb_bus_client_ab;
 
 			rc = of_property_read_u32_index(of_node,
 				"cam-ahb-bw-KBps",
 				((i * 2) + 1),
-				(uint32_t *) &cpas_core->ahb_bus_client
-				.common_data.bw_pair[i].ib);
+				&ahb_bus_client_ib);
 			if (rc) {
 				CAM_ERR(CAM_UTIL,
 					"Error reading ib bw value, rc=%d",
 					rc);
 				return rc;
 			}
+			cpas_core->ahb_bus_client.common_data.bw_pair[i].ib = ahb_bus_client_ib;
 
 			CAM_DBG(CAM_CPAS,
 				"AHB: Level: %d, ab_value %llu, ib_value: %llu",

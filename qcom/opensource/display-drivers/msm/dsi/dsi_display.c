@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
- * Copyright (c) 2021-2023 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2021-2024 Qualcomm Innovation Center, Inc. All rights reserved.
  * Copyright (c) 2016-2021, The Linux Foundation. All rights reserved.
  */
 
@@ -10,6 +10,8 @@
 #include <linux/err.h>
 #include <linux/version.h>
 #include <video/mipi_display.h>
+
+#include <drm/xiaomi/mi_disp_notifier.h>
 
 #include "msm_drv.h"
 #include "sde_connector.h"
@@ -30,7 +32,7 @@
 #include "mi_disp_print.h"
 #include "mi_disp_lhbm.h"
 #include "mi_panel_id.h"
-#include "mi_backlight_ktz8866.h"
+#include "mi_disp_event.h"
 
 #define to_dsi_display(x) container_of(x, struct dsi_display, host)
 #define INT_BASE_10 10
@@ -676,6 +678,7 @@ static bool dsi_display_validate_reg_read(struct dsi_panel *panel)
 	return false;
 }
 
+
 static void dsi_display_parse_demura_data(struct dsi_display *display)
 {
 	int rc = 0;
@@ -982,7 +985,8 @@ static int dsi_display_status_check_te(struct dsi_display *display,
 		if (!wait_for_completion_timeout(&display->esd_te_gate,
 					esd_te_timeout)) {
 			DSI_ERR("TE check failed\n");
-			return -EINVAL;
+			rc = -EINVAL;
+			break;
 		}
 	}
 
@@ -1406,6 +1410,9 @@ int dsi_display_set_power(struct drm_connector *connector,
 		int power_mode, void *disp)
 {
 	struct dsi_display *display = disp;
+	struct mi_disp_notifier *notify_data;
+	unsigned long notify_event = 0;
+	int mi_power_mode;
 	int rc = 0;
 
 	if (!display || !display->panel) {
@@ -1421,10 +1428,14 @@ int dsi_display_set_power(struct drm_connector *connector,
 	switch (power_mode) {
 	case SDE_MODE_DPMS_LP1:
 		display->panel->power_mode = power_mode;
+		notify_event = MI_DISP_DPMS_EARLY_EVENT;
+		mi_power_mode = MI_DISP_DPMS_LP1;
 		rc = dsi_panel_set_lp1(display->panel);
 		break;
 	case SDE_MODE_DPMS_LP2:
 		display->panel->power_mode = power_mode;
+		notify_event = MI_DISP_DPMS_EARLY_EVENT;
+		mi_power_mode = MI_DISP_DPMS_LP2;
 		rc = dsi_panel_set_lp2(display->panel);
 		break;
 	case SDE_MODE_DPMS_ON:
@@ -1435,15 +1446,19 @@ int dsi_display_set_power(struct drm_connector *connector,
 			if(mi_get_panel_id_by_dsi_panel(display->panel) == M1_PANEL_PA)
 				rc = dsi_panel_switch(display->panel);
 		}
+		notify_event = MI_DISP_DPMS_EVENT;
+		mi_power_mode = MI_DISP_DPMS_ON;
 		break;
 	case SDE_MODE_DPMS_OFF:
 		if (mi_disp_lhbm_fod_enabled(display->panel))
 			mi_disp_lhbm_fod_allow_tx_lhbm(display, false);
 		mi_disp_feature_event_notify_by_type(mi_get_disp_id(display->display_type),
 			MI_DISP_EVENT_POWER, sizeof(power_mode), power_mode);
+		notify_event = MI_DISP_DPMS_EARLY_EVENT;
+		mi_power_mode = MI_DISP_DPMS_POWERDOWN;
+		goto notify;
 	default:
-		mutex_unlock(&display->panel->mi_cfg.doze_lock);
-		return rc;
+		goto free;
 	}
 
 	SDE_EVT32(display->panel->power_mode, power_mode, rc);
@@ -1451,12 +1466,29 @@ int dsi_display_set_power(struct drm_connector *connector,
 			display->panel->power_mode, power_mode,
 			rc ? "failed" : "successful");
 	if (!rc) {
+		if (power_mode == SDE_MODE_DPMS_ON && ESD_TYPE != 0) {
+			DSI_INFO("[%d] recovery done\n", ESD_TYPE);
+			mi_disp_mievent_recovery(ESD_TYPE);
+		}
 		display->panel->power_mode = power_mode;
 
 		mi_disp_feature_event_notify_by_type(mi_get_disp_id(display->display_type),
 			MI_DISP_EVENT_POWER, sizeof(power_mode), power_mode);
 	}
 
+notify:
+	notify_data = kzalloc(sizeof(struct mi_disp_notifier), GFP_KERNEL);
+	if (notify_data != NULL && notify_event != 0) {
+		DSI_INFO("notifying power mode %d", mi_power_mode);
+		notify_data->disp_id = mi_get_disp_id(display->display_type);
+		notify_data->data = &mi_power_mode;
+		mi_disp_notifier_call_chain(notify_event, notify_data);
+	} else {
+		DSI_ERR("could not allocate notify data memory");
+	}
+
+free:
+	kfree(notify_data);
 	mutex_unlock(&display->panel->mi_cfg.doze_lock);
 	return rc;
 }
@@ -1710,6 +1742,11 @@ static ssize_t debugfs_esd_trigger_check(struct file *file,
 	if (!display->panel ||
 		atomic_read(&display->panel->esd_recovery_pending))
 		return user_len;
+
+	/*if (!esd_config->esd_enabled) {
+		DSI_ERR("ESD feature is not enabled\n");
+		return -EINVAL;
+	}*/
 
 	buf = kzalloc(ESD_TRIGGER_STRING_MAX_LEN, GFP_KERNEL);
 	if (!buf)
@@ -2146,7 +2183,8 @@ static int dsi_display_debugfs_init(struct dsi_display *display)
 	debugfs_create_bool("ulps_suspend_feature_enable", 0600, dir,
 			&display->panel->ulps_suspend_enabled);
 
-	debugfs_create_bool("ulps_status", 0400, dir, &display->ulps_enabled);
+	debugfs_create_bool("ulps_status", 0400, dir,
+			&display->ulps_enabled);
 
 	debugfs_create_u32("clk_gating_config", 0600, dir, &display->clk_gating_config);
 
@@ -5950,6 +5988,7 @@ error_ctrl_deinit:
 		dsi_ctrl_put(display_ctrl->ctrl);
 		dsi_phy_put(display_ctrl->phy);
 	}
+	mi_disp_mievent_str(MI_EVENT_DSI_ERROR);
 	(void)dsi_display_debugfs_deinit(display);
 error:
 	mutex_unlock(&display->display_lock);
@@ -6042,6 +6081,7 @@ static int dsi_display_init(struct dsi_display *display)
 
 	rc = _dsi_display_dev_init(display);
 	if (rc) {
+		mi_disp_mievent_str(MI_EVENT_PANEL_HW_RESOURCE_GET_FAILED);
 		DSI_ERR("device init failed for %s, rc=%d\n", display->display_type, rc);
 		goto end;
 	}
@@ -6060,6 +6100,7 @@ static int dsi_display_init(struct dsi_display *display)
 		rc = dsi_pwr_enable_regulator(&display->panel->power_info,
 								true);
 		if (rc) {
+			mi_disp_mievent_str(MI_EVENT_PANEL_HW_RESOURCE_GET_FAILED);
 			DSI_ERR("[%s] failed to enable vregs, rc=%d\n",
 					display->panel->name, rc);
 			return rc;
@@ -6067,10 +6108,12 @@ static int dsi_display_init(struct dsi_display *display)
 	}
 
 	rc = component_add(&pdev->dev, &dsi_display_comp_ops);
-	if (rc)
+	if (rc) {
+		mi_disp_mievent_str(MI_EVENT_PANEL_HW_RESOURCE_GET_FAILED);
 		DSI_ERR("component add failed, rc=%d\n", rc);
+	}
 
-	DSI_DEBUG("component add success: %s\n", display->name);
+	DSI_INFO("component add success: %s\n", display->name);
 end:
 	return rc;
 }
@@ -6158,9 +6201,11 @@ int dsi_display_dev_probe(struct platform_device *pdev)
 	if (boot_disp->boot_disp_en) {
 		/* The panel name should be same as UEFI name index */
 		panel_node = of_find_node_by_name(mdp_node, boot_disp->name);
-		if (!panel_node)
+		if (!panel_node) {
+			mi_disp_mievent_str(MI_EVENT_PANEL_RECOGNIZE_ERR);
 			DSI_WARN("%s panel_node %s not found\n", display->display_type,
 					boot_disp->name);
+		}
 	} else {
 		panel_node = of_parse_phandle(node,
 				"qcom,dsi-default-panel", 0);
@@ -6181,6 +6226,7 @@ int dsi_display_dev_probe(struct platform_device *pdev)
 
 	if (!dsi_display_validate_res(display)) {
 		rc = -EPROBE_DEFER;
+		mi_disp_mievent_str(MI_EVENT_PANEL_HW_RESOURCE_GET_FAILED);
 		DSI_ERR("resources required for display probe not present: \
 				rc=%d,panel-type=%s\n", rc, display->display_type);
 		goto end;
@@ -6229,6 +6275,10 @@ int dsi_display_dev_remove(struct platform_device *pdev)
 	}
 
 	display = platform_get_drvdata(pdev);
+	if (!display || !display->panel_node) {
+		DSI_ERR("invalid display\n");
+		return -EINVAL;
+	}
 
 	/* decrement ref count */
 	of_node_put(display->panel_node);
@@ -7104,6 +7154,7 @@ static int dsi_display_mode_dyn_clk_cpy(struct dsi_display *display,
 	bit_clk_list = &dst->priv_info->bit_clk_list;
 	bit_clk_list->front_porches =
 			kcalloc(count, sizeof(u32), GFP_KERNEL);
+
 	if (!bit_clk_list->front_porches) {
 		DSI_ERR("failed to allocate space for front porch list\n");
 		rc = -ENOMEM;
@@ -7220,6 +7271,16 @@ int dsi_display_get_modes_helper(struct dsi_display *display,
 			return rc;
 		}
 
+		/*
+		 * Update the host_config.dst_format for compressed RGB101010 pixel format.
+		 */
+		if (display->panel->host_config.dst_format == DSI_PIXEL_FORMAT_RGB101010 &&
+			display_mode.timing.dsc_enabled) {
+			display->panel->host_config.dst_format = DSI_PIXEL_FORMAT_RGB888;
+			DSI_DEBUG("updated dst_format from %d to %d\n",
+				DSI_PIXEL_FORMAT_RGB101010,
+				display->panel->host_config.dst_format);
+		}
 		if (display->cmdline_timing == display_mode.mode_idx) {
 			topology_override = display->cmdline_topology;
 			is_preferred = true;
@@ -7288,26 +7349,11 @@ int dsi_display_get_modes_helper(struct dsi_display *display,
 			struct dsi_display_mode *sub_mode =
 					&display->modes[array_idx];
 			u32 curr_refresh_rate;
-			bool multi_timing = false;
-			int j = 0;
 
 			if (!sub_mode) {
 				DSI_ERR("invalid mode data\n");
 				rc = -EFAULT;
 				return rc;
-			}
-
-			if(dfps_caps.dfps_support && display->panel->mi_cfg.multi_timing_enable) {
-				for(j = 0; j < display_mode.priv_info->mi_per_timing_fps_len; j++) {
-					if (display_mode.priv_info->mi_per_timing_fps[j]== dfps_caps.dfps_list[i])
-						{
-							multi_timing = true;
-							DSI_INFO("dfps_list[%d]=%d , multi timing :mi_dpfs_array[%d]=%d \n",
-								i, dfps_caps.dfps_list[i], j, display_mode.priv_info->mi_per_timing_fps[j] );
-						}
-				}
-				if (multi_timing == false)
-					continue;
 			}
 
 			memcpy(sub_mode, &display_mode, sizeof(display_mode));
@@ -7939,14 +7985,6 @@ int dsi_display_set_mode(struct dsi_display *display,
 		}
 	}
 
-	display->panel->mi_cfg.last_fps = display->panel->cur_mode->timing.refresh_rate;
-
-	rc = dsi_display_restore_bit_clk(display, &adj_mode);
-	if (rc) {
-		DSI_ERR("[%s] bit clk rate cannot be restored\n", display->name);
-		goto error;
-	}
-
 	rc = dsi_display_validate_mode_set(display, &adj_mode, flags);
 	if (rc) {
 		DSI_ERR("[%s] mode cannot be set\n", display->name);
@@ -8064,6 +8102,7 @@ static int dsi_display_pre_switch(struct dsi_display *display)
 error_ctrl_deinit:
 	(void)dsi_display_ctrl_deinit(display);
 error_ctrl_clk_off:
+	mi_disp_mievent_str(MI_EVENT_DSI_ERROR);
 	(void)dsi_display_clk_ctrl(display->dsi_clk_handle,
 			DSI_CORE_CLK, DSI_CLK_OFF);
 error:
@@ -8146,6 +8185,7 @@ static void dsi_display_handle_fifo_overflow(struct work_struct *work)
 	}
 
 	DSI_INFO("handle DSI FIFO overflow error\n");
+
 	SDE_EVT32(SDE_EVTLOG_FUNC_ENTRY);
 
 	dsi_display_clk_ctrl(display->dsi_clk_handle,
@@ -8509,6 +8549,7 @@ error_ctrl_deinit:
 error_phy_disable:
 	(void)dsi_display_phy_disable(display);
 error_ctrl_clk_off:
+	mi_disp_mievent_str(MI_EVENT_DSI_ERROR);
 	(void)dsi_display_clk_ctrl(display->dsi_clk_handle,
 			DSI_CORE_CLK, DSI_CLK_OFF);
 error_panel_post_unprep:
@@ -8865,6 +8906,9 @@ int dsi_display_enable(struct dsi_display *display)
 		}
 		DSI_DEBUG("cont splash enabled, display enable not required\n");
 		dsi_display_panel_id_notification(display);
+		if(mi_get_panel_id_by_dsi_panel(display->panel) == M2_PANEL_PA){
+			mi_dsi_display_manufacturer_info_init(display);
+		}
 		if (mi_cfg->panel_build_id_read_needed) {
 			if (mi_dsi_display_read_panel_build_id(display) <= 0)
 				DSI_INFO("[%s] DSI display read panel build id failed\n", display->name);
@@ -8910,13 +8954,12 @@ int dsi_display_enable(struct dsi_display *display)
 			goto error;
 		}
 	}
-	dsi_display_panel_id_notification(display);
 
+	dsi_display_panel_id_notification(display);
 	if (mi_cfg->panel_build_id_read_needed) {
 		if (mi_dsi_display_read_panel_build_id(display) <= 0)
 			DSI_INFO("[%s] DSI display read panel build id failed\n", display->name);
 	}
-
 	/* Block sending pps command if modeset is due to fps difference */
 	if ((mode->priv_info->dsc_enabled ||
 			mode->priv_info->vdc_enabled) &&
@@ -9032,13 +9075,11 @@ int dsi_display_post_enable(struct dsi_display *display)
 			mi_dsi_panel_set_gamma_update_state(panel);
 		}
 	}
-
 	if(mi_get_panel_id_by_dsi_panel(display->panel) == M1_PANEL_PA){
 		if (mode->dsi_mode_flags & DSI_MODE_FLAG_DMS) {
 			dsi_panel_post_switch(display->panel);
 		}
 	}
-
 	/*update aod command once for before P2*/
 	if(mi_get_panel_id_by_dsi_panel(display->panel) == M1_PANEL_PA
 			&& !mode->priv_info->is_update_aod_gir
@@ -9382,7 +9423,6 @@ int dsi_display_unprepare(struct dsi_display *display)
 
 void __init dsi_display_register(void)
 {
-	mi_backlight_ktz8866_init();
 	mi_disp_feature_init();
 	dsi_phy_drv_register();
 	dsi_ctrl_drv_register();

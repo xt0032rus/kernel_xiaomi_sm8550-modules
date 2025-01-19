@@ -5,9 +5,6 @@
 #define OIS_I2C_ADDR     0X7C
 #define A1_OIS_FW        0x1A8F025B
 #define A2_OIS_FW        0x1A930253
-#define A3_OIS_FW        0x1A940043
-#define B1_OIS_FW        0x1A990123
-#define C2_OIS_FW        0x1A9C0033
 #define GYRO_CHANNEL     0xF09C
 #define GYRO_CALIB       0xF09D
 

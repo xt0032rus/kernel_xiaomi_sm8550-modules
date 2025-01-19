@@ -136,16 +136,15 @@ ssize_t mi_disp_read(struct file *filp, char __user *buffer,
 				return ret;
 		} else {
 			unsigned length = e->event.base.length;
-			unsigned copy_length = length - e->offset;
-			bool partial_read = false;
 
-			DISP_DEBUG("length is: %d, offset is: %d, count is %d",
-					length, e->offset, count);
-
-			if (copy_length > count - ret) {
-				copy_length = count - ret;
-
-				partial_read = true;
+			if (length > count - ret) {
+put_back_event:
+				spin_lock_irq(&df->client_spinlock);
+				client->event_space -= length;
+				list_add(&e->link, &client->event_list);
+				spin_unlock_irq(&df->client_spinlock);
+				wake_up_interruptible(&client->event_wait);
+				break;
 			}
 
 			DISP_DEBUG("%s display event type: %s\n",
@@ -153,30 +152,15 @@ ssize_t mi_disp_read(struct file *filp, char __user *buffer,
 				get_disp_event_type_name(e->event.base.type));
 			DISP_DEBUG("%s display event length: %d\n",
 				get_disp_id_name(e->event.base.disp_id), length);
-			DISP_INFO("%s display event copy length: %d\n",
-				get_disp_id_name(e->event.base.disp_id), copy_length);
 
-			if (copy_to_user(buffer + ret, ((__u8*)&e->event) +
-					e->offset, copy_length)) {
+			if (copy_to_user(buffer + ret, &e->event, length)) {
 				if (ret == 0)
 					ret = -EFAULT;
 				goto put_back_event;
 			}
 
-			ret += copy_length;
-			if (partial_read) {
-				e->offset += count;
-put_back_event:
-				DISP_INFO("putting event back!");
-				spin_lock_irq(&df->client_spinlock);
-				client->event_space -= length;
-				list_add(&e->link, &client->event_list);
-				spin_unlock_irq(&df->client_spinlock);
-				wake_up_interruptible(&client->event_wait);
-				break;
-			} else {
-				kfree(e);
-			}
+			ret += length;
+			kfree(e);
 		}
 	}
 	mutex_unlock(&client->event_lock);
@@ -671,6 +655,64 @@ static int mi_disp_ioctl_get_fps(struct disp_feature_client *client, void *data)
 	return ret;
 }
 
+static int mi_disp_ioctl_get_manufacturer_info(struct disp_feature_client *client, void *data)
+{
+	int rc = 0;
+	struct disp_feature *df = client->df;
+	struct disp_manufacturer_info_req *req = data;
+	u32 disp_id = req->base.disp_id;
+	char __user *wp_buf;
+	char __user *maxbrightness_buf ;
+	char __user *manufacturertime_buf;
+	struct disp_display *dd_ptr = NULL;
+	struct panel_manufaturer_info info;
+	int len;
+	int ret = 0;
+	wp_buf = req->wp_info;
+	maxbrightness_buf = req->maxbrightness;
+	manufacturertime_buf = req->manufacturer_time;
+	if (is_support_disp_id(disp_id)) {
+		dd_ptr = &df->d_display[disp_id];
+		if (dd_ptr->intf_type == MI_INTF_DSI) {
+			rc = mi_dsi_display_read_manufacturer_struct_by_globleparam(dd_ptr->display,&info);
+			if(rc < 0){
+				DISP_INFO("can not read manufacture_info \n");
+				return -EINVAL;
+			}
+			len = (info.wp_info_len > req->wp_info_len) ? req->wp_info_len : info.wp_info_len;
+			req->wp_info_len = info.wp_info_len;
+			if (len && wp_buf) {
+				if (copy_to_user(wp_buf, info.wp_info, len)) {
+					return -EFAULT;
+				}
+			}
+			len = (info.max_brightness_len > req->max_brightness_len) ? req->max_brightness_len : info.max_brightness_len;
+			req->max_brightness_len = info.max_brightness_len;
+			if (len && maxbrightness_buf) {
+				if (copy_to_user(maxbrightness_buf, info.maxbrightness, len)) {
+					return -EFAULT;
+				}
+			}
+			len = (info.manufacturer_time_len> req->manufacturer_time_len) ? req->manufacturer_time_len : info.manufacturer_time_len;
+			req->manufacturer_time_len= info.manufacturer_time_len;
+			if (len && manufacturertime_buf) {
+				if (copy_to_user(manufacturertime_buf, info.manufacturer_time, len)) {
+					return -EFAULT;
+				}
+			}
+		} else {
+			DISP_INFO("Unsupported display(%s intf)\n",
+				get_disp_intf_type_name(dd_ptr->intf_type));
+			ret = -EINVAL;
+		}
+	} else {
+		DISP_INFO("Unsupported display id\n");
+		ret = -EINVAL;
+	}
+	return ret;
+}
+
+
 static int mi_disp_ioctl_register_event(struct disp_feature_client *client,
 		void *data)
 {
@@ -939,6 +981,7 @@ static const struct disp_ioctl_desc disp_ioctls[] = {
 	DISP_IOCTL_DEF(MI_DISP_IOCTL_GET_BRIGHTNESS, mi_disp_ioctl_get_brightness),
 	DISP_IOCTL_DEF(MI_DISP_IOCTL_GET_FEATURE, mi_disp_ioctl_get_feature),
 	DISP_IOCTL_DEF(MI_DISP_IOCTL_SET_LOCAL_HBM, mi_disp_ioctl_set_local_hbm),
+	DISP_IOCTL_DEF(MI_DISP_IOCTL_GET_MANUFACTURER_INFO, mi_disp_ioctl_get_manufacturer_info),
 };
 
 #define MI_DISP_IOCTL_COUNT	ARRAY_SIZE(disp_ioctls)

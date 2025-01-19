@@ -12,7 +12,6 @@
 #include "dsi_display.h"
 #include "sde_trace.h"
 #include <drm/drm_fixed.h>
-
 #include "mi_sde_encoder.h"
 
 #define SDE_DEBUG_VIDENC(e, fmt, ...) SDE_DEBUG("enc%d intf%d " fmt, \

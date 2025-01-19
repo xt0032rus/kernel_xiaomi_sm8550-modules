@@ -13,6 +13,5 @@
 
 int mi_dsi_panel_parse_esd_gpio_config(struct dsi_panel *panel);
 int mi_dsi_panel_parse_config(struct dsi_panel *panel);
-void mi_dsi_panel_parse_multi_timing_config(struct dsi_panel *panel);
 
 #endif /* _MI_DISP_PARSE_H_ */
